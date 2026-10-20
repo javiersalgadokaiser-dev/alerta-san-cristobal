@@ -116,8 +116,9 @@ var AlertaSC = (() => {
   var LOCATION = {
     name: "Cerro San Cristóbal",
     place: "Santiago, Región Metropolitana",
-    lat: -33.4253,
-    lon: -70.6331,
+    lat: -33.414667,
+    lon: -70.616194,
+    coords: `33°24'52.8"S 70°36'58.3"W`,
     timezone: "America/Santiago"
   };
   var HORIZON_HOURS = 72;
@@ -141,7 +142,7 @@ var AlertaSC = (() => {
   };
   var STATIONS = {
     metar: ["SCTB", "SCEL"],
-    // Tobalaba (~9 km), Pudahuel (~15 km)
+    // Tobalaba (~8 km), Pudahuel (~16 km)
     taf: ["SCEL", "SCTB"],
     // Una tormenta observada a menos de esta distancia del cerro activa "Alarma".
     nearKm: 12,
@@ -613,6 +614,16 @@ var AlertaSC = (() => {
       },
       timeline,
       perSource,
+      // Lo que pronostica cada fuente hora a hora, para comparar en el panel
+      series: fc.map((s) => ({
+        id: s.id,
+        name: s.name,
+        origin: s.origin,
+        precip: s.precip.map((v) => round(v, 1)),
+        gust: s.gust.map((v) => round(v)),
+        temp: s.temp.map((v) => round(v, 1)),
+        thunder: s.thunder.map((v) => v === null ? null : v ? 1 : 0)
+      })),
       observations
     };
   }
@@ -3499,6 +3510,7 @@ Panel: ${dashboardUrl}` : ""
       hazardOrder: HAZARDS.map((h) => h.id),
       timeline: result.timeline,
       perSource: result.perSource,
+      series: result.series,
       observations: result.observations,
       tafs: tafs || [],
       dmc,

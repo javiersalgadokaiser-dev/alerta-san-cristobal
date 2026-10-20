@@ -77,9 +77,11 @@
       <div id="meteored" class="meteored"></div>
     </section>
 
-    <section aria-labelledby="h-models">
-      <h2 id="h-models">Comparación de fuentes</h2>
-      <p class="section-sub">Máximos de cada modelo en las próximas 72 horas.</p>
+    <section aria-labelledby="h-compare">
+      <h2 id="h-compare">Comparación de fuentes</h2>
+      <p class="section-sub">Qué pronostica cada fuente para las próximas 72 horas. Toca una fuente en la leyenda para destacarla.</p>
+      <div id="compare" class="chart-card compare"></div>
+      <h3 class="table-title">Máximos de cada fuente en 72 horas</h3>
       <div id="models" class="table-scroll"></div>
     </section>
 
@@ -126,6 +128,7 @@
   </dialog>
 
   <footer class="footer">
+    <p id="punto">Punto vigilado: <a href="https://www.google.com/maps?q=-33.414667,-70.616194" rel="noopener" target="_blank">33°24'52.8"S 70°36'58.3"W</a> (Cerro San Cristóbal).</p>
     <p>Datos: <a href="https://www.meteochile.gob.cl" rel="noopener">Dirección Meteorológica de Chile</a> (avisos e imágenes de rayos GOES-19),
       <a href="https://open-meteo.com" rel="noopener">Open-Meteo</a> (CC BY 4.0),
       <a href="https://api.met.no" rel="noopener">MET Norway</a> (CC BY 4.0),

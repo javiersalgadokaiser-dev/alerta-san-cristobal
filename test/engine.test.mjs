@@ -33,7 +33,7 @@ test('METAR: tormenta, cumulonimbus, ráfagas y lluvia intensa', () => {
   assert.equal(m.cb, true);
   assert.equal(m.heavyRain, true);
   assert.equal(m.gustKmh, 56);
-  assert.equal(m.distKm, 9);
+  assert.equal(m.distKm, 8);
 });
 
 test('METAR: la tendencia TEMPO TSRA no se confunde con tormenta observada', () => {
@@ -43,7 +43,7 @@ test('METAR: la tendencia TEMPO TSRA no se confunde con tormenta observada', () 
   assert.equal(metar('METAR SCEL 201800Z 18010KT 9999 FEW040 18/09 Q1010 NOSIG').thunderTrend, false);
 });
 
-test('Tormenta observada a 9 km del cerro activa Alarma', () => {
+test('Tormenta observada a 8 km del cerro activa Alarma', () => {
   const r = evaluate({ now: NOW, forecasts: calm(6), metars: [metar('METAR SCTB 201750Z 27010KT 9999 TS FEW040CB 18/09 Q1010')], cfg });
   assert.equal(level(r, 'tormenta'), 3);
   assert.equal(r.overall.hazardId, 'tormenta');

@@ -12,6 +12,9 @@
   --series: #2a78d6;
   --series-wash: rgba(42, 120, 214, 0.1);
   --link: #1c5cab;
+  /* Un color fijo por fuente (paleta categórica validada, en este orden) */
+  --cat-1: #2a78d6; --cat-2: #eb6834; --cat-3: #1baf7a; --cat-4: #eda100;
+  --cat-5: #e87ba4; --cat-6: #008300; --cat-7: #6250d6; --cat-8: #e34948;
   /* Colores de estado: nunca se usan solos, siempre con forma + texto. */
   --good: #0ca30c;
   --warning: #fab219;
@@ -35,6 +38,8 @@
     --series: #3987e5;
     --series-wash: rgba(57, 135, 229, 0.12);
     --link: #86b6ef;
+    --cat-1: #3987e5; --cat-2: #d95926; --cat-3: #199e70; --cat-4: #c98500;
+    --cat-5: #d55181; --cat-6: #008300; --cat-7: #9085e9; --cat-8: #e66767;
   }
 }
 
@@ -52,6 +57,8 @@
   --series: #3987e5;
   --series-wash: rgba(57, 135, 229, 0.12);
   --link: #86b6ef;
+    --cat-1: #3987e5; --cat-2: #d95926; --cat-3: #199e70; --cat-4: #c98500;
+    --cat-5: #d55181; --cat-6: #008300; --cat-7: #9085e9; --cat-8: #e66767;
 }
 
 * { box-sizing: border-box; }
@@ -248,7 +255,7 @@ details[open] > summary { margin-bottom: 6px; }
 .chart .tick { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 .chart .day { fill: var(--ink-2); font-size: 11px; font-weight: 600; }
 .chart .thr-label { fill: var(--ink-2); font-size: 11px; }
-.chart .value-label { fill: var(--ink); font-size: 11px; font-weight: 600; }
+.chart .value-label { fill: var(--ink); font-size: 11px; font-weight: 600; paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; }
 .chart .empty { fill: var(--ink-2); font-size: 13px; }
 .chart .bar { fill: var(--series); transition: opacity 0.1s; }
 .chart .line { fill: none; stroke: var(--series); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
@@ -399,6 +406,58 @@ tr:last-child td { border-bottom: 0; }
 }
 .row { display: flex; flex-wrap: wrap; gap: 8px; }
 code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 0.92em; }
+
+/* --- Comparación de fuentes ---------------------------------------------------- */
+
+.compare { display: grid; gap: 8px; }
+.compare .chart-sub { margin: 0; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.tab {
+  font: inherit;
+  font-size: 14px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.tab:hover { background: var(--surface-2); }
+.tab[aria-selected=true] { background: var(--ink); color: var(--surface); border-color: var(--ink); font-weight: 600; }
+.compare-legend { gap: 4px 6px; }
+.legend-item {
+  font: inherit;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+}
+.legend-item:hover { background: var(--surface-2); }
+.legend-item[aria-pressed=true] { border-color: var(--axis); background: var(--surface-2); font-weight: 600; }
+.legend-item.static { cursor: default; color: var(--ink-2); }
+.line-key { display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+.legend-item .line-key { margin-right: 0; }
+.line-key.reference { background: var(--ink-2); height: 3px; }
+.chart .series-line { stroke-width: 2; }
+.chart .series-line.dim { opacity: 0.18; }
+.chart .series-line.focus { stroke-width: 3; }
+.chart .reference-line { stroke: var(--ink-2); stroke-width: 2.5; }
+.chart .reference-dot { fill: var(--ink-2); }
+.chart .band-period { fill: color-mix(in srgb, var(--lvl) 14%, transparent); }
+.chart .band-label { fill: var(--ink-2); font-size: 11px; font-weight: 600; }
+.chart .lane-bg { fill: var(--surface-2); }
+.chart .lane-label { fill: var(--ink); font-size: 12px; }
+.chart .lane-run { fill: var(--series); }
+.chart .lane-run.status { fill: var(--lvl); }
+.chart-tip .tip-row.dim { opacity: 0.45; }
+.table-title { margin: 14px 0 8px; font-size: 14px; color: var(--ink-2); }
+td .line-key { margin-right: 8px; }
 
 .footer { max-width: 1120px; margin: 0 auto; padding: 8px 16px 40px; color: var(--ink-2); font-size: 13px; }
 

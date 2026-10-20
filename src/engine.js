@@ -280,6 +280,16 @@ export function evaluate({ now, forecasts = [], metars = [], tafs = [], dmcAlert
     },
     timeline,
     perSource,
+    // Lo que pronostica cada fuente hora a hora, para comparar en el panel
+    series: fc.map((s) => ({
+      id: s.id,
+      name: s.name,
+      origin: s.origin,
+      precip: s.precip.map((v) => round(v, 1)),
+      gust: s.gust.map((v) => round(v)),
+      temp: s.temp.map((v) => round(v, 1)),
+      thunder: s.thunder.map((v) => (v === null ? null : v ? 1 : 0)),
+    })),
     observations,
   };
 }

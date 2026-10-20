@@ -1,11 +1,13 @@
 // Configuración del sistema de alerta temprana.
 // Aquí se ajustan la ubicación, las fuentes y los umbrales de cada nivel.
 
+// Punto vigilado: 33°24'52.8"S 70°36'58.3"W (ladera del cerro, ~630 m de altura).
 export const LOCATION = {
   name: 'Cerro San Cristóbal',
   place: 'Santiago, Región Metropolitana',
-  lat: -33.4253,
-  lon: -70.6331,
+  lat: -33.414667,
+  lon: -70.616194,
+  coords: '33°24\'52.8"S 70°36\'58.3"W',
   timezone: 'America/Santiago',
 };
 
@@ -23,7 +25,7 @@ export const MODELS = [
 ];
 
 // Dirección Meteorológica de Chile: Sistema de Avisos, Alertas y Alarmas.
-// El cerro está en la zona "05m_Valle_Longitudinal" de la Región Metropolitana.
+// El punto vigilado está en la zona "05m_Valle_Longitudinal" de la Región Metropolitana.
 export const DMC = {
   url: 'https://archivos.meteochile.gob.cl/portaldmc/AAA/datos_AAA.json',
   pageUrl: 'https://archivos.meteochile.gob.cl/portaldmc/AAA/aaa_mapa.php',
@@ -37,7 +39,7 @@ export const DMC = {
 
 // Estaciones aeronáuticas cercanas (METAR y TAF de aviationweather.gov).
 export const STATIONS = {
-  metar: ['SCTB', 'SCEL'], // Tobalaba (~9 km), Pudahuel (~15 km)
+  metar: ['SCTB', 'SCEL'], // Tobalaba (~8 km), Pudahuel (~16 km)
   taf: ['SCEL', 'SCTB'],
   // Una tormenta observada a menos de esta distancia del cerro activa "Alarma".
   nearKm: 12,

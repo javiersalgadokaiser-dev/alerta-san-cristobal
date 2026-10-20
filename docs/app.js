@@ -1,4 +1,4 @@
-import { hourlyChart, niceScale } from './charts.js';
+import { hourlyChart, laneChart, multiLineChart, niceRange, niceScale } from './charts.js';
 import { API_URL } from './config.js';
 
 const LEVELS = ['Normal', 'Aviso', 'Alerta', 'Alarma'];
@@ -11,7 +11,11 @@ const KEYS = {
   levels: 'alerta-sc-niveles',
   notify: 'alerta-sc-notificaciones',
   meteored: 'alerta-sc-meteored',
+  compare: 'alerta-sc-comparar',
 };
+// Color fijo por fuente (sigue a la fuente, nunca a su posición): --cat-1…7 en styles.css
+const SOURCE_ORDER = ['ecmwf_ifs', 'gfs_seamless', 'icon_seamless', 'gem_seamless', 'ukmo_seamless', 'meteofrance_seamless', 'metno'];
+const sourceColor = (id) => `var(--cat-${SOURCE_ORDER.indexOf(id) + 1 || 8})`;
 // Colores de la paleta de la DMC en sus imágenes de rayos (antigüedad del rayo)
 const GLM_LEGEND = [
   ['#00f1ec', '0-15 min'],
@@ -527,6 +531,215 @@ function renderMeteored(d) {
   box.replaceChildren(h('div', { class: 'meteored-cta' }, btn, open, h('span', { class: 'muted' }, 'Se carga desde meteored.cl (incluye su publicidad).')));
 }
 
+// --- Comparación de fuentes ---------------------------------------------------
+
+let compareMetric = store.get(KEYS.compare) || 'lluvia';
+let compareFocus = null;
+let compareChart = null;
+
+const median = (vals) => {
+  const a = vals.filter((v) => v != null).sort((x, y) => x - y);
+  if (!a.length) return null;
+  const k = a.length >> 1;
+  return a.length % 2 ? a[k] : (a[k - 1] + a[k]) / 2;
+};
+
+function cumulative(values) {
+  let sum = 0;
+  let any = false;
+  return values.map((v) => {
+    if (v != null) {
+      sum += v;
+      any = true;
+    }
+    return any ? Math.round(sum * 10) / 10 : null;
+  });
+}
+
+/** Periodos de avisos DMC del peligro indicado, como franjas del gráfico. */
+function dmcBands(d, hazards) {
+  return (d.dmc?.alerts ?? [])
+    .filter((a) => hazards.includes(a.hazard) && a.start)
+    .map((a) => ({ from: a.start, to: a.end ?? a.start + 6 * 3600000, label: `${a.type} DMC`, level: a.effectiveLevel }));
+}
+
+const COMPARE_METRICS = {
+  lluvia: {
+    tab: 'Lluvia acumulada',
+    sub: 'Milímetros acumulados desde ahora según cada fuente. La franja marca el periodo del aviso de la DMC, si hay uno.',
+    values: (s) => cumulative(s.precip),
+    unit: 'mm',
+    digits: 1,
+    hazards: ['lluvia'],
+  },
+  viento: {
+    tab: 'Ráfagas',
+    sub: 'Ráfaga máxima de cada hora, en km/h. MET Norway no entrega ráfagas para Chile.',
+    values: (s) => s.gust,
+    reference: (d) => d.timeline.map((x) => x.gustMed),
+    unit: 'km/h',
+    digits: 0,
+    hazards: ['viento'],
+  },
+  temperatura: {
+    tab: 'Temperatura',
+    sub: 'Temperatura de cada hora, en °C, en el punto vigilado.',
+    values: (s) => s.temp,
+    reference: (d) => d.timeline.map((x) => x.tempMed),
+    unit: '°C',
+    digits: 1,
+    hazards: ['calor', 'helada'],
+    fromZero: false,
+  },
+  tormenta: {
+    tab: 'Tormenta',
+    sub: 'Horas en que cada fuente pronostica tormenta eléctrica, junto al pronóstico aeronáutico (TAF) y los avisos oficiales de la DMC.',
+  },
+};
+
+function renderCompare(d) {
+  compareChart?.destroy();
+  compareChart = null;
+  const box = $('#compare');
+  if (!d.series?.length) {
+    box.replaceChildren(h('p', { class: 'muted' }, 'La comparación aparecerá después de la próxima revisión del servidor.'));
+    return;
+  }
+  if (!COMPARE_METRICS[compareMetric]) compareMetric = 'lluvia';
+  const metric = COMPARE_METRICS[compareMetric];
+
+  const tabs = h(
+    'div',
+    { class: 'tabs', role: 'tablist', 'aria-label': 'Variable a comparar' },
+    Object.entries(COMPARE_METRICS).map(([id, m]) => {
+      const b = h('button', { type: 'button', role: 'tab', class: 'tab', 'aria-selected': String(id === compareMetric) }, m.tab);
+      b.addEventListener('click', () => {
+        compareMetric = id;
+        store.set(KEYS.compare, id);
+        renderCompare(data);
+      });
+      return b;
+    }),
+  );
+  const chartBox = h('div', { class: 'compare-chart' });
+  box.replaceChildren(tabs, h('p', { class: 'chart-sub' }, metric.sub), chartBox);
+
+  if (compareMetric === 'tormenta') return renderThunderLanes(d, box, chartBox);
+
+  const series = d.series
+    .map((s) => ({ id: s.id, name: s.name, color: sourceColor(s.id), values: metric.values(s) }))
+    .filter((s) => s.values.some((v) => v != null));
+  const refValues = metric.reference ? metric.reference(d) : d.timeline.map((_, i) => median(series.map((s) => s.values[i])));
+  const fmt = (v) => `${fmtNum(v, metric.digits)} ${metric.unit}`;
+
+  // Leyenda: identifica cada línea y permite destacarla
+  const legend = h(
+    'div',
+    { class: 'legend compare-legend' },
+    series.map((s) => {
+      const b = h('button', { type: 'button', class: 'legend-item', 'aria-pressed': String(compareFocus === s.id) }, h('i', { class: 'line-key', style: `background:${s.color}` }), s.name);
+      b.addEventListener('click', () => {
+        compareFocus = compareFocus === s.id ? null : s.id;
+        renderCompare(data);
+      });
+      return b;
+    }),
+    h('span', { class: 'legend-item static' }, h('i', { class: 'line-key reference' }), 'Mediana'),
+  );
+  chartBox.before(legend);
+
+  const all = [...series.flatMap((s) => s.values), ...refValues].filter((v) => v != null);
+  const lo = Math.min(...all);
+  const hi = Math.max(...all);
+  const scale = metric.fromZero === false ? niceRange(lo - 1, hi + 1) : niceRange(0, Math.max(hi * 1.1, 1));
+  compareChart = multiLineChart(chartBox, {
+    times: d.timeline.map((x) => x.t),
+    tz,
+    ariaLabel: `${metric.tab} según cada fuente`,
+    height: 240,
+    series,
+    reference: { name: 'Mediana', values: refValues },
+    focus: compareFocus,
+    bands: dmcBands(d, metric.hazards),
+    ...scale,
+    format: (v) => fmtNum(v, metric.digits),
+    tooltip: (i) => [
+      { key: true, color: 'var(--ink-2)', value: refValues[i] == null ? '–' : fmt(refValues[i]), label: 'mediana' },
+      ...series
+        .filter((s) => s.values[i] != null)
+        .sort((a, b) => b.values[i] - a.values[i])
+        .map((s) => ({ key: true, color: s.color, value: fmt(s.values[i]), label: s.name, dim: compareFocus && compareFocus !== s.id })),
+    ],
+  });
+  box.append(
+    tableView(
+      ['Hora', ...series.map((s) => s.name), 'Mediana'],
+      d.timeline.map((x, i) => [fmtShort(x.t), ...series.map((s) => fmtNum(s.values[i], metric.digits)), fmtNum(refValues[i], metric.digits)]),
+    ),
+  );
+}
+
+function renderThunderLanes(d, box, chartBox) {
+  const times = d.timeline.map((x) => x.t);
+  const covers = (t, from, to) => t >= from && t < to;
+  const lanes = d.series.map((s) => ({ name: s.name, color: sourceColor(s.id), values: s.thunder }));
+  for (const taf of d.tafs ?? []) {
+    lanes.push({
+      name: `TAF ${taf.name.replace(/ \(.*\)/, '')}`,
+      color: 'var(--ink-2)',
+      values: times.map((t) => (t >= taf.validTo ? null : taf.periods.some((p) => (p.thunder || p.cb) && covers(t, p.from, p.to)) ? 1 : 0)),
+    });
+  }
+  const dmcStorms = (d.dmc?.alerts ?? []).filter((a) => a.hazard === 'tormenta' && a.start);
+  const dmcLevel = Math.max(1, ...dmcStorms.map((a) => a.effectiveLevel));
+  lanes.push({
+    name: 'Aviso DMC',
+    level: dmcLevel,
+    values: times.map((t) => (dmcStorms.some((a) => covers(t, a.start, a.end ?? a.start + 6 * 3600000)) ? 1 : 0)),
+  });
+
+  compareChart = laneChart(chartBox, {
+    times,
+    tz,
+    ariaLabel: 'Horas con tormenta según cada fuente',
+    lanes,
+    tooltip: (i) => {
+      const on = lanes.filter((l) => l.values[i] === 1);
+      const models = d.series.filter((s) => s.thunder[i] === 1).length;
+      return [
+        { value: `${models} de ${d.series.length}`, label: 'modelos con tormenta' },
+        ...(on.length
+          ? on.map((l) => ({ key: true, color: l.level != null ? `var(--${['good', 'warning', 'serious', 'critical'][l.level]})` : l.color, value: l.name, label: 'tormenta' }))
+          : [{ value: 'Ninguna fuente', label: 'indica tormenta' }]),
+      ];
+    },
+  });
+  box.append(
+    tableView(
+      ['Hora', ...lanes.map((l) => l.name)],
+      d.timeline.map((x, i) => [fmtShort(x.t), ...lanes.map((l) => (l.values[i] === 1 ? 'Sí' : l.values[i] === 0 ? '—' : 'sin dato'))]),
+    ),
+  );
+}
+
+function tableView(columns, rows) {
+  return h(
+    'details',
+    { class: 'table-view' },
+    h('summary', {}, 'Ver datos en tabla'),
+    h(
+      'div',
+      { class: 'table-scroll' },
+      h(
+        'table',
+        {},
+        h('thead', {}, h('tr', {}, columns.map((c, i) => h('th', { class: i ? 'num' : null }, c)))),
+        h('tbody', {}, rows.map((r) => h('tr', {}, r.map((v, i) => h('td', { class: i ? 'num' : null }, v))))),
+      ),
+    ),
+  );
+}
+
 function renderModels(d) {
   const cols = ['Fuente', 'Lluvia máx. 24 h (mm)', 'Lluvia máx. 1 h (mm)', 'Ráfaga máx. (km/h)', 'Horas con tormenta', 'CAPE máx. (J/kg)', 'T máx. (°C)', 'T mín. (°C)'];
   $('#models').replaceChildren(
@@ -541,7 +754,7 @@ function renderModels(d) {
           h(
             'tr',
             {},
-            h('td', {}, `${p.name} `, h('span', { class: 'muted' }, `(${p.origin})`)),
+            h('td', {}, h('i', { class: 'line-key', style: `background:${sourceColor(p.id)}` }), `${p.name} `, h('span', { class: 'muted' }, `(${p.origin})`)),
             [fmtNum(p.rain24), fmtNum(p.rain1h), fmtNum(p.gust, 0), p.thunderHours, fmtNum(p.cape, 0), fmtNum(p.tmax), fmtNum(p.tmin)].map((v) =>
               h('td', { class: 'num' }, v),
             ),
@@ -661,6 +874,7 @@ function render(d) {
   renderDmc(d);
   renderObs(d);
   renderMeteored(d);
+  renderCompare(d);
   renderModels(d);
   renderHistory(d);
   renderSources(d);

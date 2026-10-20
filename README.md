@@ -1,7 +1,8 @@
 # Alerta temprana · Cerro San Cristóbal
 
 Sistema de alerta temprana de **tormentas eléctricas y rayos**, lluvia intensa, viento fuerte,
-nieve, calor y heladas para el Cerro San Cristóbal (Santiago).
+nieve, calor y heladas para el Cerro San Cristóbal (Santiago), en el punto
+**33°24'52.8"S 70°36'58.3"W** (-33.414667, -70.616194; ladera del cerro, ~630 m).
 
 - **Servidor en Google Apps Script** (gratis, con tu Gmail): revisa las fuentes **cada 10
   minutos** y envía **correos** cuando algo cambia, sin necesidad de tener el computador
@@ -37,11 +38,19 @@ En el teléfono: abre la dirección del panel y elige **Instalar app** (Android)
 |---|---|---|
 | [DMC · Imágenes de rayos GOES-19](https://climatologia.meteochile.gob.cl/application/diarioe/imagenesTormenta/) | **Rayos reales de la última hora**: distancia y dirección desde el cerro | Observado |
 | [DMC · Avisos, Alertas y Alarmas](https://archivos.meteochile.gob.cl/portaldmc/AAA/aaa_mapa.php) | Avisos oficiales para la zona del cerro (*05m_Valle_Longitudinal*) | Oficial |
-| METAR de Tobalaba (9 km) y Pudahuel (15 km) | Tormentas, cumulonimbus, ráfagas y lluvia observadas | Observado |
+| METAR de Tobalaba (8 km) y Pudahuel (16 km) | Tormentas, cumulonimbus, ráfagas y lluvia observadas | Observado |
 | TAF de Pudahuel | Pronóstico aeronáutico de tormentas y ráfagas (24 h) | Pronóstico |
 | [Open-Meteo](https://open-meteo.com): ECMWF, GFS, ICON, GEM, UKMO, ARPEGE | 6 modelos: tormenta, CAPE, lluvia, ráfagas, nieve, temperatura | Pronóstico |
 | [MET Norway](https://api.met.no) | Un séptimo pronóstico | Pronóstico |
 | [Meteored · Mapa de avisos](https://www.meteored.cl/avisos-meteorologicos/) | Mapa interactivo de avisos de todo Chile, integrado en el panel | Visual |
+
+### Comparación de fuentes
+
+El panel muestra qué pronostica **cada fuente** para las próximas 72 horas, con cuatro
+pestañas: **lluvia acumulada**, **ráfagas** y **temperatura** (una línea por modelo, más la
+mediana y la franja del aviso de la DMC si hay uno) y **tormenta** (un carril por fuente con las
+horas en que pronostica tormenta, junto al TAF y los avisos oficiales de la DMC). Al tocar una
+fuente en la leyenda se destaca su línea. Cada fuente conserva siempre el mismo color.
 
 ### Cómo se detectan los rayos
 
@@ -49,7 +58,7 @@ La DMC publica cada 10 minutos una imagen infrarroja del satélite GOES-19 con l
 última hora (sensor GLM), con unos 35 a 45 minutos de retraso. El servidor descarga la más
 reciente y busca los puntos de rayo por su color: cian, celeste, azul o azul oscuro según
 ocurrieron entre 0 y 60 minutos antes de la imagen. Luego calcula su distancia y dirección
-desde el cerro. La posición de cada píxel se calibró con las 13 ciudades marcadas en la
+desde el punto vigilado. La posición de cada píxel se calibró con las 13 ciudades marcadas en la
 imagen, con un error típico de 2 píxeles (unos 10 km). El panel muestra un recorte de Chile
 central con el cerro, los anillos de distancia y una animación de la última hora.
 
@@ -66,7 +75,7 @@ toma el nivel más alto entre sus señales, y el panel muestra el porqué (*Señ
 | Señal | Nivel |
 |---|---|
 | Rayos por satélite a menos de 15 km del cerro | Alarma |
-| Tormenta observada en Tobalaba (METAR "TS", a menos de 12 km) | Alarma |
+| Tormenta observada en Tobalaba (METAR "TS", a menos de 12 km del punto) | Alarma |
 | Rayos por satélite a menos de 40 km | Alerta |
 | Tormenta en Pudahuel, en las cercanías ("VCTS") o prevista en 2 h | Alerta |
 | Cumulonimbus sobre Tobalaba | Alerta |
@@ -91,7 +100,7 @@ dispare solo una alerta):
 | Temperatura máxima | 33 °C | 36 °C | 39 °C |
 | Temperatura mínima | 0 °C | −2 °C | −5 °C |
 
-Todos los umbrales y distancias se ajustan en [src/config.js](src/config.js).
+Todos los umbrales, distancias y la ubicación se ajustan en [src/config.js](src/config.js).
 
 ### Cuándo llega un correo
 

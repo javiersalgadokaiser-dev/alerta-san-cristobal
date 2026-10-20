@@ -162,6 +162,7 @@ export async function runCheck({ kv, mailer, settings = {}, now = Date.now() }) 
     hazardOrder: HAZARDS.map((h) => h.id),
     timeline: result.timeline,
     perSource: result.perSource,
+    series: result.series,
     observations: result.observations,
     tafs: tafs || [],
     dmc,
