@@ -651,6 +651,7 @@ function updateBadge(d) {
 // --- Carga ---------------------------------------------------------------------
 
 function render(d) {
+  $('#app').classList.remove('sin-datos');
   data = d;
   tz = d.location.timezone;
   renderHero(d);
@@ -678,7 +679,10 @@ function banner(text) {
   b.textContent = text || '';
 }
 
+const GUIDE_URL = 'https://github.com/javiersalgadokaiser-dev/alerta-san-cristobal/blob/main/google-apps-script/INSTRUCCIONES.md';
+
 function showSetup(message) {
+  $('#app').classList.add('sin-datos');
   $('#hero').className = 'hero lvl-1';
   const btn = h('button', { class: 'btn', type: 'button' }, 'Abrir ajustes');
   btn.addEventListener('click', openSettings);
@@ -689,7 +693,7 @@ function showSetup(message) {
       h('div', { class: 'hero-level' }, 'Configuración pendiente'),
       h('div', { class: 'hero-title' }, 'Conecta el panel con tu servidor de Google'),
       h('p', {}, message),
-      h('p', {}, btn),
+      h('p', { class: 'row' }, btn, h('a', { class: 'btn btn-ghost', href: GUIDE_URL, target: '_blank', rel: 'noopener' }, 'Ver instrucciones')),
     ),
   );
 }
@@ -700,7 +704,7 @@ async function load() {
   $('#app').setAttribute('aria-busy', 'true');
   try {
     if (!apiUrl()) {
-      showSetup('Pega en Ajustes la dirección de la aplicación web de Apps Script (termina en /exec). Las instrucciones están en google-apps-script/INSTRUCCIONES.md.');
+      showSetup('Pega en Ajustes la dirección de la aplicación web de Apps Script (termina en /exec).');
       return;
     }
     const res = await fetch(apiUrl(), { cache: 'no-store' });

@@ -85,6 +85,8 @@ main {
 main > *, .two-col > * { min-width: 0; }
 
 main[aria-busy="true"] .chart-card { opacity: 0.6; }
+/* Sin servidor configurado solo se muestra la tarjeta de configuración */
+main.sin-datos > :not(#hero) { display: none; }
 
 /* --- Barra superior ------------------------------------------------------- */
 
