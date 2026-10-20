@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Alerta San Cristóbal</title>
+  <meta name="description" content="Sistema de alerta temprana de tormentas eléctricas, lluvia y viento para el Cerro San Cristóbal, Santiago.">
+  <meta name="theme-color" content="#0d366b">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Alerta SC">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="icons/icon.svg" alt="" width="36" height="36">
+      <div>
+        <h1>Alerta temprana</h1>
+        <p>Cerro San Cristóbal · Santiago</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <span id="updated" class="muted" aria-live="polite"></span>
+      <button id="refresh" class="btn-icon" type="button" aria-label="Actualizar" title="Actualizar">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button id="open-settings" class="btn-icon" type="button" aria-label="Ajustes" title="Ajustes">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></g></svg>
+      </button>
+      <button id="install" class="btn" type="button" hidden>Instalar app</button>
+    </div>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <main id="app" aria-busy="true">
+    <section id="hero" class="hero lvl-0">
+      <div class="hero-text"><p class="muted">Cargando…</p></div>
+    </section>
+
+    <section aria-labelledby="h-hazards">
+      <h2 id="h-hazards">Peligros</h2>
+      <div id="hazards" class="hazard-grid"></div>
+    </section>
+
+    <section aria-labelledby="h-rayos">
+      <h2 id="h-rayos">Rayos por satélite</h2>
+      <p class="section-sub">Rayos de la última hora detectados por el satélite GOES-19 (sensor GLM). La DMC publica una imagen cada 10 minutos, con unos 40 minutos de retraso.</p>
+      <div id="rayos" class="rayos"></div>
+    </section>
+
+    <section aria-labelledby="h-charts">
+      <h2 id="h-charts">Próximas 72 horas</h2>
+      <p id="charts-sub" class="section-sub"></p>
+      <div class="chart-card" id="chart-thunder"></div>
+      <div class="chart-card" id="chart-rain"></div>
+      <div class="chart-card" id="chart-gust"></div>
+    </section>
+
+    <div class="two-col">
+      <section aria-labelledby="h-dmc">
+        <h2 id="h-dmc">Avisos oficiales DMC</h2>
+        <div id="dmc"></div>
+      </section>
+      <section aria-labelledby="h-obs">
+        <h2 id="h-obs">Observado ahora</h2>
+        <div id="obs"></div>
+      </section>
+    </div>
+
+    <section aria-labelledby="h-meteored">
+      <h2 id="h-meteored">Mapa de avisos · Meteored</h2>
+      <p class="section-sub">Mapa interactivo de Meteored con los avisos meteorológicos de todo Chile (los publica la DMC).</p>
+      <div id="meteored" class="meteored"></div>
+    </section>
+
+    <section aria-labelledby="h-models">
+      <h2 id="h-models">Comparación de fuentes</h2>
+      <p class="section-sub">Máximos de cada modelo en las próximas 72 horas.</p>
+      <div id="models" class="table-scroll"></div>
+    </section>
+
+    <div class="two-col">
+      <section aria-labelledby="h-history">
+        <h2 id="h-history">Historial de alertas</h2>
+        <div id="history"></div>
+      </section>
+      <section aria-labelledby="h-sources">
+        <h2 id="h-sources">Estado de las fuentes</h2>
+        <div id="sources"></div>
+      </section>
+    </div>
+  </main>
+
+  <dialog id="settings" class="settings" aria-labelledby="settings-title">
+    <form method="dialog" class="settings-body">
+      <div class="settings-head">
+        <h2 id="settings-title">Ajustes</h2>
+        <button class="btn-icon" value="cerrar" aria-label="Cerrar">✕</button>
+      </div>
+
+      <fieldset>
+        <legend>Servidor de Google</legend>
+        <p class="muted">Dirección de la aplicación web de Apps Script. Termina en <code>/exec</code>.</p>
+        <input id="api-url" type="url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" spellcheck="false">
+        <div class="row">
+          <button id="api-save" class="btn" type="button">Probar y guardar</button>
+          <button id="api-share" class="btn btn-ghost" type="button">Copiar enlace para otro equipo</button>
+        </div>
+        <p id="api-msg" class="muted" aria-live="polite"></p>
+      </fieldset>
+
+      <fieldset>
+        <legend>Notificaciones en este equipo</legend>
+        <p class="muted">Muestra un aviso del sistema cuando un peligro sube de nivel, mientras la app esté abierta (aunque esté minimizada).</p>
+        <div class="row">
+          <button id="notif-toggle" class="btn" type="button">Activar notificaciones</button>
+          <button id="notif-test" class="btn btn-ghost" type="button">Probar</button>
+        </div>
+        <p id="notif-msg" class="muted" aria-live="polite"></p>
+      </fieldset>
+    </form>
+  </dialog>
+
+  <footer class="footer">
+    <p>Datos: <a href="https://www.meteochile.gob.cl" rel="noopener">Dirección Meteorológica de Chile</a> (avisos e imágenes de rayos GOES-19),
+      <a href="https://open-meteo.com" rel="noopener">Open-Meteo</a> (CC BY 4.0),
+      <a href="https://api.met.no" rel="noopener">MET Norway</a> (CC BY 4.0),
+      <a href="https://aviationweather.gov" rel="noopener">NOAA Aviation Weather Center</a> y
+      <a href="https://www.meteored.cl" rel="noopener">Meteored</a>.</p>
+    <p>Herramienta complementaria. Ante una emergencia, sigue las indicaciones de
+      <a href="https://senapred.cl" rel="noopener">SENAPRED</a> y de la DMC.</p>
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,171 @@
+# Alerta temprana · Cerro San Cristóbal
+
+Sistema de alerta temprana de **tormentas eléctricas y rayos**, lluvia intensa, viento fuerte,
+nieve, calor y heladas para el Cerro San Cristóbal (Santiago).
+
+- **Servidor en Google Apps Script** (gratis, con tu Gmail): revisa las fuentes **cada 10
+  minutos** y envía **correos** cuando algo cambia, sin necesidad de tener el computador
+  encendido.
+- **Panel instalable como app** en el computador y en el teléfono, publicado en GitHub Pages:
+  https://javiersalgadokaiser-dev.github.io/alerta-san-cristobal/
+
+```
+Google Apps Script (cada 10 min)                       GitHub Pages
+  fuentes ─► motor de alertas ─► ¿cambió algo? ─► correo (Gmail)
+                    │
+                    └─► estado guardado ─► doGet (JSON) ─────► panel / app
+```
+
+## Usarlo en el computador
+
+- **Doble clic en `Abrir app.cmd`**: abre el panel en su propia ventana, sin la barra del
+  navegador.
+- **Instalarlo como app** (menú Inicio y barra de tareas): abre el panel en **Edge** →
+  menú **⋯ → Aplicaciones → Instalar este sitio como una aplicación**. En `edge://apps` puedes
+  marcar **Iniciar automáticamente al iniciar sesión** para que se abra al prender el
+  computador.
+- **Notificaciones**: en **⚙ Ajustes → Activar notificaciones**, Windows muestra un aviso
+  cuando un peligro sube de nivel, mientras la app esté abierta (aunque esté minimizada). El
+  ícono de la app muestra cuántos peligros están activos.
+
+En el teléfono: abre la dirección del panel y elige **Instalar app** (Android) o
+**Compartir → Agregar a inicio** (iPhone).
+
+## Fuentes
+
+| Fuente | Qué aporta | Tipo |
+|---|---|---|
+| [DMC · Imágenes de rayos GOES-19](https://climatologia.meteochile.gob.cl/application/diarioe/imagenesTormenta/) | **Rayos reales de la última hora**: distancia y dirección desde el cerro | Observado |
+| [DMC · Avisos, Alertas y Alarmas](https://archivos.meteochile.gob.cl/portaldmc/AAA/aaa_mapa.php) | Avisos oficiales para la zona del cerro (*05m_Valle_Longitudinal*) | Oficial |
+| METAR de Tobalaba (9 km) y Pudahuel (15 km) | Tormentas, cumulonimbus, ráfagas y lluvia observadas | Observado |
+| TAF de Pudahuel | Pronóstico aeronáutico de tormentas y ráfagas (24 h) | Pronóstico |
+| [Open-Meteo](https://open-meteo.com): ECMWF, GFS, ICON, GEM, UKMO, ARPEGE | 6 modelos: tormenta, CAPE, lluvia, ráfagas, nieve, temperatura | Pronóstico |
+| [MET Norway](https://api.met.no) | Un séptimo pronóstico | Pronóstico |
+| [Meteored · Mapa de avisos](https://www.meteored.cl/avisos-meteorologicos/) | Mapa interactivo de avisos de todo Chile, integrado en el panel | Visual |
+
+### Cómo se detectan los rayos
+
+La DMC publica cada 10 minutos una imagen infrarroja del satélite GOES-19 con los rayos de la
+última hora (sensor GLM), con unos 35 a 45 minutos de retraso. El servidor descarga la más
+reciente y busca los puntos de rayo por su color: cian, celeste, azul o azul oscuro según
+ocurrieron entre 0 y 60 minutos antes de la imagen. Luego calcula su distancia y dirección
+desde el cerro. La posición de cada píxel se calibró con las 13 ciudades marcadas en la
+imagen, con un error típico de 2 píxeles (unos 10 km). El panel muestra un recorte de Chile
+central con el cerro, los anillos de distancia y una animación de la última hora.
+
+Los avisos de Meteored para Chile son los mismos de la DMC, que el sistema ya lee
+directamente. Por eso Meteored se muestra tal cual en el panel y sus datos no se copian.
+
+## Niveles
+
+Se usan los nombres de la DMC: **Normal**, **Aviso**, **Alerta** y **Alarma**. Cada peligro
+toma el nivel más alto entre sus señales, y el panel muestra el porqué (*Señales*).
+
+**Tormenta eléctrica** (la prioridad):
+
+| Señal | Nivel |
+|---|---|
+| Rayos por satélite a menos de 15 km del cerro | Alarma |
+| Tormenta observada en Tobalaba (METAR "TS", a menos de 12 km) | Alarma |
+| Rayos por satélite a menos de 40 km | Alerta |
+| Tormenta en Pudahuel, en las cercanías ("VCTS") o prevista en 2 h | Alerta |
+| Cumulonimbus sobre Tobalaba | Alerta |
+| La mitad o más de las fuentes pronostican tormenta en una misma hora (mínimo 3) | Alerta |
+| TAF con tormenta | Alerta (Aviso si es solo "PROB30") |
+| Rayos por satélite a menos de 100 km | Aviso |
+| Hubo tormenta en una estación en la última hora, o cumulonimbus sobre Pudahuel | Aviso |
+| 2 fuentes pronostican tormenta en una misma hora | Aviso |
+| Atmósfera muy inestable (CAPE ≥ 1000 J/kg) con lluvia | Aviso |
+| Aviso, Alerta o Alarma de la DMC para la zona | El mismo de la DMC |
+| Aviso de la DMC en una zona vecina (precordillera, cordillera de la costa) | Aviso como máximo |
+
+**Lluvia, viento y otros** (con la mediana entre fuentes, para que un modelo exagerado no
+dispare solo una alerta):
+
+| Peligro | Aviso | Alerta | Alarma |
+|---|---|---|---|
+| Lluvia en 24 h | 10 mm | 25 mm | 50 mm |
+| Lluvia en 1 h | 4 mm | 8 mm | 15 mm |
+| Ráfagas | 50 km/h | 70 km/h | 90 km/h |
+| Nieve en 24 h | 0,5 cm | 5 cm | 15 cm |
+| Temperatura máxima | 33 °C | 36 °C | 39 °C |
+| Temperatura mínima | 0 °C | −2 °C | −5 °C |
+
+Todos los umbrales y distancias se ajustan en [src/config.js](src/config.js).
+
+### Cuándo llega un correo
+
+- **Sube un nivel** o **la DMC publica un aviso nuevo** para la zona: de inmediato.
+- **Baja o termina**: solo si el nivel menor se mantiene durante 3 horas, para no recibir
+  correos cada vez que un pronóstico oscila.
+- Si caen las fuentes de pronóstico, nunca se declara el fin de una alerta.
+- Si el envío falla, se reintenta en las revisiones siguientes (hasta 1 hora).
+
+Todos los cambios del mismo momento van en un solo correo.
+
+## Puesta en marcha
+
+1. **Servidor**: sigue [google-apps-script/INSTRUCCIONES.md](google-apps-script/INSTRUCCIONES.md)
+   (unos 10 minutos: pegar el código, ejecutar `instalar` y publicarlo como aplicación web).
+2. **Panel**: abre `Abrir app.cmd`, entra a **⚙ Ajustes** y pega la URL del paso 1.
+
+## Desarrollo
+
+El código del servidor está en `src/` (módulos de JavaScript que funcionan igual en Node y en
+Apps Script). `google-apps-script/Codigo.gs` **se genera** a partir de ellos: no lo edites a
+mano.
+
+```bash
+npm test          # pruebas de los casos críticos (rayos, tormentas, avisos DMC, correos)
+npm run build     # genera google-apps-script/Codigo.gs (usa esbuild con npx)
+npm run probar    # ejecuta Codigo.gs en un Apps Script simulado, con datos reales
+npm start         # panel local en http://localhost:5174
+```
+
+> En Windows, PowerShell puede bloquear `npm`: usa estos comandos desde **cmd** o Git Bash.
+
+`npm run probar` simula UrlFetchApp, PropertiesService y CacheService (con sus límites de
+tamaño), MailApp y los activadores, y corre `Codigo.gs` sin las APIs que Apps Script no tiene.
+Con `OUT_DIR=carpeta` guarda el estado, las imágenes y el correo generados, y
+`DATOS=carpeta npm start` sirve el panel con esos datos en
+`http://localhost:5174/#api=http://localhost:5174/api-prueba`.
+
+Para publicar el panel, haz commit y push a `main`: GitHub Pages sirve la carpeta `docs/`. Si
+cambian archivos del panel, sube `VERSION` en [docs/sw.js](docs/sw.js) para que las apps
+instaladas descarguen la versión nueva.
+
+### Estructura
+
+```
+src/
+  check.js          una revisión completa: fuentes → evaluación → correo → guardado
+  engine.js         combina las fuentes y decide el nivel de cada peligro
+  notify.js         qué cambios se avisan y el contenido del correo
+  config.js         ubicación, fuentes, umbrales y calibración de la imagen de rayos
+  sources/          DMC (avisos y rayos), Open-Meteo, MET Norway y METAR/TAF
+  lib/              decodificador y codificador JPEG (jpeg-js, BSD/Apache)
+  gas/              adaptadores de Apps Script: fetch, almacenamiento, Gmail, doGet y activadores
+google-apps-script/ Codigo.gs (generado) e instrucciones de instalación
+docs/               panel web instalable (GitHub Pages)
+tools/              generador de Codigo.gs, simulador de Apps Script y servidor local
+test/               pruebas automáticas
+Abrir app.cmd       abre el panel como app en el computador
+```
+
+## Límites
+
+Todo funciona con cuentas gratuitas:
+
+- **Apps Script**: en el simulador, cada revisión dura de 1 a 6 segundos; en Google puede ser
+  algo más lenta. El activador puede sumar hasta 90 minutos al día, y estimamos que el sistema
+  usa entre 5 y 15. El uso real se ve en **Ejecuciones**.
+- **Gmail**: hasta 100 correos al día.
+- **Almacenamiento**: unos 60 KB de los 500 KB disponibles.
+- **Open-Meteo**: uso no comercial gratuito.
+
+## Importante
+
+Este sistema es **complementario**. Ante una emergencia, sigue las indicaciones oficiales de
+[SENAPRED](https://senapred.cl) y de la [Dirección Meteorológica de Chile](https://www.meteochile.gob.cl).
+Los datos de Open-Meteo y MET Norway se usan bajo licencia CC BY 4.0, y las imágenes y avisos
+de la DMC citando su fuente, como pide su portal.

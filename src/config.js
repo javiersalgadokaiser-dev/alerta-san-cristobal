@@ -1,0 +1,97 @@
+// Configuración del sistema de alerta temprana.
+// Aquí se ajustan la ubicación, las fuentes y los umbrales de cada nivel.
+
+export const LOCATION = {
+  name: 'Cerro San Cristóbal',
+  place: 'Santiago, Región Metropolitana',
+  lat: -33.4253,
+  lon: -70.6331,
+  timezone: 'America/Santiago',
+};
+
+// Horas de pronóstico que se analizan desde la hora actual.
+export const HORIZON_HOURS = 72;
+
+// Modelos globales consultados a través de Open-Meteo (https://open-meteo.com).
+export const MODELS = [
+  { id: 'ecmwf_ifs', name: 'ECMWF IFS', origin: 'Europa' },
+  { id: 'gfs_seamless', name: 'GFS', origin: 'EE.UU.' },
+  { id: 'icon_seamless', name: 'ICON', origin: 'Alemania' },
+  { id: 'gem_seamless', name: 'GEM', origin: 'Canadá' },
+  { id: 'ukmo_seamless', name: 'UKMO', origin: 'Reino Unido' },
+  { id: 'meteofrance_seamless', name: 'ARPEGE', origin: 'Francia' },
+];
+
+// Dirección Meteorológica de Chile: Sistema de Avisos, Alertas y Alarmas.
+// El cerro está en la zona "05m_Valle_Longitudinal" de la Región Metropolitana.
+export const DMC = {
+  url: 'https://archivos.meteochile.gob.cl/portaldmc/AAA/datos_AAA.json',
+  pageUrl: 'https://archivos.meteochile.gob.cl/portaldmc/AAA/aaa_mapa.php',
+  region: '05m',
+  regionName: 'Metropolitana',
+  zones: ['05m_Valle_Longitudinal'],
+  // Zonas vecinas: se muestran, pero como máximo suben el nivel a "Aviso".
+  nearbyZones: ['05m_Precordillera', '05m_Cordillera_Costa'],
+  zoneRowName: 'Valle',
+};
+
+// Estaciones aeronáuticas cercanas (METAR y TAF de aviationweather.gov).
+export const STATIONS = {
+  metar: ['SCTB', 'SCEL'], // Tobalaba (~9 km), Pudahuel (~15 km)
+  taf: ['SCEL', 'SCTB'],
+  // Una tormenta observada a menos de esta distancia del cerro activa "Alarma".
+  nearKm: 12,
+  // Las observaciones más antiguas que esto no se consideran actuales.
+  maxAgeMinutes: 90,
+};
+
+// Rayos detectados por el satélite GOES-19 (sensor GLM): imágenes que la DMC
+// publica cada 10 minutos, con unos 35 a 45 minutos de retraso.
+export const GLM = {
+  pageUrl: 'https://climatologia.meteochile.gob.cl/application/diarioe/imagenesTormenta/',
+  imageBase: 'https://climatologia.meteochile.gob.cl/images/imagenesTormenta/',
+  // La imagen usa latitud/longitud directas: x = ax·lon + bx, y = ay·lat + by.
+  // Calibrado con 13 ciudades marcadas en la imagen (error típico < 2 px, ~10 km).
+  projection: { ax: 20.5827, bx: 2384.62, ay: -20.4644, by: -204.23 },
+  // Distancia del rayo más cercano al cerro para cada nivel [Aviso, Alerta, Alarma], en km.
+  radiiKm: [100, 40, 15],
+  // Hasta cuántos minutos atrás se busca una imagen publicada.
+  lookbackMinutes: 120,
+  // Una imagen más antigua que esto ya no cuenta como observación actual.
+  maxAgeMinutes: 100,
+  // Recorte de Chile central que se muestra en el panel (píxeles de la imagen original).
+  crop: { x: 800, y: 360, w: 260, h: 240 },
+  // Imágenes que guarda el panel para la animación (6 = la última hora).
+  frames: 6,
+};
+
+// Mapa de avisos de Meteored. Sus avisos para Chile son los de la DMC; el panel
+// muestra la página tal cual, sin copiar sus datos.
+export const METEORED_URL = 'https://www.meteored.cl/avisos-meteorologicos/';
+
+// Umbrales en orden [Aviso, Alerta, Alarma].
+export const THRESHOLDS = {
+  rain24h: [10, 25, 50], // mm acumulados en 24 h (mediana entre modelos)
+  rain1h: [4, 8, 15], // mm en una hora
+  gust: [50, 70, 90], // km/h, ráfaga máxima
+  snow24h: [0.5, 5, 15], // cm en 24 h
+  heat: [33, 36, 39], // °C, temperatura máxima
+  frost: [0, -2, -5], // °C, temperatura mínima (igual o menor)
+  // Tormenta según modelos: "Aviso" si al menos N fuentes la pronostican en una
+  // misma hora; "Alerta" si lo hace esta fracción de las fuentes (mínimo 3).
+  thunderAviso: 2,
+  thunderAlertaShare: 0.5,
+  // CAPE (energía convectiva, J/kg) que se considera atmósfera muy inestable.
+  cape: 1000,
+};
+
+// Cada cuánto se vuelve a consultar Open-Meteo (los modelos cambian cada hora;
+// así se ahorran llamadas y tiempo de ejecución en Google).
+export const OPEN_METEO_CACHE_MINUTES = 30;
+
+export const NOTIFY = {
+  // Horas que un peligro debe mantenerse en un nivel menor antes de avisar que
+  // bajó o terminó. Evita correos repetidos cuando un pronóstico oscila.
+  downgradeAfterHours: 3,
+  historySize: 100,
+};

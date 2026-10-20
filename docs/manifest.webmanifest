@@ -1,0 +1,18 @@
+{
+  "id": "./",
+  "name": "Alerta temprana Cerro San Cristóbal",
+  "short_name": "Alerta SC",
+  "description": "Alertas de tormentas eléctricas, rayos, lluvia y viento para el Cerro San Cristóbal, Santiago.",
+  "lang": "es-CL",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0d366b",
+  "theme_color": "#0d366b",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

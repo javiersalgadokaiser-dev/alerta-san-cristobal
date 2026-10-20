@@ -1,0 +1,13 @@
+{
+  "name": "alerta-san-cristobal",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Sistema de alerta temprana de tormentas eléctricas, rayos, lluvia y viento para el Cerro San Cristóbal (Santiago).",
+  "scripts": {
+    "build": "node tools/build-apps-script.mjs",
+    "test": "node --test test/*.test.mjs",
+    "probar": "node tools/probar-apps-script.mjs",
+    "start": "node tools/servidor.mjs"
+  }
+}
