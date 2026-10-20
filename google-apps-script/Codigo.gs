@@ -11,7 +11,8 @@
  *       Ejecutar como: Yo   ·   Quién tiene acceso: Cualquier usuario
  *  4. Copia la URL que termina en /exec y pégala en Ajustes del panel.
  *
- * Funciones que puedes ejecutar: instalar, revisar, probarCorreo, verEstado, desinstalar.
+ * Funciones que puedes ejecutar: instalar, revisar, probarCorreo, verEstado, desinstalar,
+ * pausarCorreos (deja de enviar correos) y reanudarCorreos (los vuelve a activar).
  * Opcional, en Configuración del proyecto → Propiedades de la secuencia de comandos:
  *   CORREOS   = correos separados por coma (si no existe, se usa tu Gmail)
  *   URL_PANEL = dirección del panel (para el botón de los correos)
@@ -47,7 +48,9 @@ var AlertaSC = (() => {
     desinstalar: () => desinstalar,
     doGet: () => doGet,
     instalar: () => instalar,
+    pausarCorreos: () => pausarCorreos,
     probarCorreo: () => probarCorreo,
+    reanudarCorreos: () => reanudarCorreos,
     revisar: () => revisar,
     verEstado: () => verEstado
   });
@@ -3719,7 +3722,7 @@ Panel: ${dashboardUrl}` : ""
       degraded,
       changes: changes.length,
       history: [...state.history].reverse().slice(0, 50),
-      email: { configured: !!mailer2.configured, last: state.lastEmail || null }
+      email: { configured: !!mailer2.configured, paused: !!mailer2.paused, last: state.lastEmail || null }
     };
     await kv2.put("state", state);
     await kv2.put("status", status);
@@ -3743,6 +3746,7 @@ Panel: ${dashboardUrl}` : ""
   }
   async function sendSafely(mailer2, email) {
     if (!mailer2 || !mailer2.configured) return { ok: false, skipped: true, error: "Correo no configurado" };
+    if (mailer2.paused) return { ok: false, skipped: true, error: "Correos en pausa" };
     try {
       return await mailer2.send(email);
     } catch (e) {
@@ -3832,6 +3836,10 @@ Panel: ${dashboardUrl}` : ""
     get configured() {
       return recipients().length > 0;
     },
+    // CORREOS_PAUSADOS = si: se sigue revisando, pero no se envía nada
+    get paused() {
+      return setting("CORREOS_PAUSADOS").toLowerCase() === "si";
+    },
     send({ subject, html, text }) {
       const to = recipients();
       if (MailApp.getRemainingDailyQuota() < to.length) return { ok: false, error: "Se agotó la cuota diaria de correos de Google" };
@@ -3886,6 +3894,14 @@ Panel: ${dashboardUrl}` : ""
     }
     console.log(n ? "Revisiones automáticas detenidas." : "No había revisiones automáticas activas.");
   }
+  function pausarCorreos() {
+    PropertiesService.getScriptProperties().setProperty("CORREOS_PAUSADOS", "si");
+    console.log("Correos en pausa. Las revisiones y la app siguen funcionando. Para reactivarlos, ejecuta reanudarCorreos().");
+  }
+  function reanudarCorreos() {
+    PropertiesService.getScriptProperties().deleteProperty("CORREOS_PAUSADOS");
+    console.log(`Correos reactivados. Se enviarán a: ${recipients().join(", ")}`);
+  }
   async function probarCorreo() {
     const status = kv().get("status") || await revisar();
     if (!status) {
@@ -3900,6 +3916,7 @@ Panel: ${dashboardUrl}` : ""
     if (!s) return console.log("Aún no hay ninguna revisión. Ejecuta instalar().");
     console.log(`Última revisión: ${new Date(s.generatedAt).toLocaleString("es-CL", { timeZone: LOCATION.timezone })}`);
     console.log(`Estado: ${s.overall.levelName} · ${s.overall.headline}`);
+    console.log(mailer.paused ? "Correos: EN PAUSA (ejecuta reanudarCorreos para activarlos)" : `Correos: activos, a ${recipients().join(", ")}`);
     for (const h of s.hazards) console.log(`  ${h.name}: ${h.levelName}`);
     for (const src of s.sources) console.log(`  [${src.ok ? "OK" : "FALLA"}] ${src.name}${src.ok ? "" : `: ${src.error}`}`);
     const err = setting("ULTIMO_ERROR");
@@ -3928,3 +3945,5 @@ function instalar() { return AlertaSC.instalar(); }
 function probarCorreo() { return AlertaSC.probarCorreo(); }
 function verEstado() { return AlertaSC.verEstado(); }
 function desinstalar() { return AlertaSC.desinstalar(); }
+function pausarCorreos() { return AlertaSC.pausarCorreos(); }
+function reanudarCorreos() { return AlertaSC.reanudarCorreos(); }

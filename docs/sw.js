@@ -2,7 +2,7 @@
 // teléfono). Siempre intenta primero la red; sin conexión usa lo guardado.
 // Los datos del servidor de Google no pasan por aquí (otro dominio): el panel
 // guarda la última respuesta por su cuenta.
-const VERSION = 'v2.2.0';
+const VERSION = 'v2.2.1';
 const CACHE = `alerta-sc-${VERSION}`;
 const SHELL = ['./', 'styles.css', 'app.js', 'charts.js', 'config.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png'];
 

@@ -846,17 +846,19 @@ function renderSources(d) {
     ),
   );
   const e = d.email;
-  const emailText = !e.configured
-    ? 'Correo no configurado.'
-    : e.last
-      ? `Último correo ${ago(e.last.at)}: “${e.last.subject}”${e.last.ok || e.last.skipped ? '' : ` · error: ${e.last.error}`}`
-      : 'Activo. Aún no se ha enviado ninguna alerta.';
+  const emailText = e.paused
+    ? 'En pausa: no se envían correos. Para activarlos, ejecuta reanudarCorreos en Apps Script.'
+    : !e.configured
+      ? 'Correo no configurado.'
+      : e.last
+        ? `Último correo ${ago(e.last.at)}: “${e.last.subject}”${e.last.ok || e.last.skipped ? '' : ` · error: ${e.last.error}`}`
+        : 'Activo. Aún no se ha enviado ninguna alerta.';
   rows.push(
     h(
       'li',
       {},
-      levelMark(!e.configured ? 1 : e.last && !e.last.ok && !e.last.skipped ? 3 : 0),
-      h('div', {}, 'Correos desde Gmail', h('span', { class: 'meta' }, emailText)),
+      levelMark(e.paused || !e.configured ? 1 : e.last && !e.last.ok && !e.last.skipped ? 3 : 0),
+      h('div', {}, e.paused ? 'Correos desde Gmail · en pausa' : 'Correos desde Gmail', h('span', { class: 'meta' }, emailText)),
     ),
   );
   if (d.ultimoError) {

@@ -45,7 +45,8 @@ const header = `/**
  *       Ejecutar como: Yo   ·   Quién tiene acceso: Cualquier usuario
  *  4. Copia la URL que termina en /exec y pégala en Ajustes del panel.
  *
- * Funciones que puedes ejecutar: instalar, revisar, probarCorreo, verEstado, desinstalar.
+ * Funciones que puedes ejecutar: instalar, revisar, probarCorreo, verEstado, desinstalar,
+ * pausarCorreos (deja de enviar correos) y reanudarCorreos (los vuelve a activar).
  * Opcional, en Configuración del proyecto → Propiedades de la secuencia de comandos:
  *   CORREOS   = correos separados por coma (si no existe, se usa tu Gmail)
  *   URL_PANEL = dirección del panel (para el botón de los correos)
@@ -68,6 +69,8 @@ function instalar() { return AlertaSC.instalar(); }
 function probarCorreo() { return AlertaSC.probarCorreo(); }
 function verEstado() { return AlertaSC.verEstado(); }
 function desinstalar() { return AlertaSC.desinstalar(); }
+function pausarCorreos() { return AlertaSC.pausarCorreos(); }
+function reanudarCorreos() { return AlertaSC.reanudarCorreos(); }
 `;
 
 const out = join(root, 'google-apps-script/Codigo.gs');

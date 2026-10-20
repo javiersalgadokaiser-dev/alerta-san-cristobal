@@ -121,6 +121,9 @@ Todos los umbrales, distancias y la ubicación se ajustan en [src/config.js](src
 
 Todos los cambios del mismo momento van en un solo correo.
 
+Para **pausar los correos** sin detener las revisiones, ejecuta `pausarCorreos` en Apps Script; para
+reactivarlos, `reanudarCorreos`. Mientras están en pausa, los cambios quedan en el historial del panel.
+
 ## Puesta en marcha
 
 1. **Servidor**: sigue [google-apps-script/INSTRUCCIONES.md](google-apps-script/INSTRUCCIONES.md)

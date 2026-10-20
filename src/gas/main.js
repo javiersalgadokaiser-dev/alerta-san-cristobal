@@ -89,6 +89,10 @@ const mailer = {
   get configured() {
     return recipients().length > 0;
   },
+  // CORREOS_PAUSADOS = si: se sigue revisando, pero no se envía nada
+  get paused() {
+    return setting('CORREOS_PAUSADOS').toLowerCase() === 'si';
+  },
   send({ subject, html, text }) {
     const to = recipients();
     if (MailApp.getRemainingDailyQuota() < to.length) return { ok: false, error: 'Se agotó la cuota diaria de correos de Google' };
@@ -154,7 +158,19 @@ export function desinstalar() {
   console.log(n ? 'Revisiones automáticas detenidas.' : 'No había revisiones automáticas activas.');
 }
 
-/** Envía un correo de prueba con el estado actual. */
+/** Deja de enviar correos (las revisiones y la app siguen funcionando). */
+export function pausarCorreos() {
+  PropertiesService.getScriptProperties().setProperty('CORREOS_PAUSADOS', 'si');
+  console.log('Correos en pausa. Las revisiones y la app siguen funcionando. Para reactivarlos, ejecuta reanudarCorreos().');
+}
+
+/** Vuelve a enviar correos. Solo avisa los cambios que ocurran desde ahora. */
+export function reanudarCorreos() {
+  PropertiesService.getScriptProperties().deleteProperty('CORREOS_PAUSADOS');
+  console.log(`Correos reactivados. Se enviarán a: ${recipients().join(', ')}`);
+}
+
+/** Envía un correo de prueba con el estado actual (aunque los correos estén en pausa). */
 export async function probarCorreo() {
   const status = kv().get('status') || (await revisar());
   if (!status) {
@@ -171,6 +187,7 @@ export function verEstado() {
   if (!s) return console.log('Aún no hay ninguna revisión. Ejecuta instalar().');
   console.log(`Última revisión: ${new Date(s.generatedAt).toLocaleString('es-CL', { timeZone: LOCATION.timezone })}`);
   console.log(`Estado: ${s.overall.levelName} · ${s.overall.headline}`);
+  console.log(mailer.paused ? 'Correos: EN PAUSA (ejecuta reanudarCorreos para activarlos)' : `Correos: activos, a ${recipients().join(', ')}`);
   for (const h of s.hazards) console.log(`  ${h.name}: ${h.levelName}`);
   for (const src of s.sources) console.log(`  [${src.ok ? 'OK' : 'FALLA'}] ${src.name}${src.ok ? '' : `: ${src.error}`}`);
   const err = setting('ULTIMO_ERROR');

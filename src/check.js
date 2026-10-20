@@ -174,7 +174,7 @@ export async function runCheck({ kv, mailer, settings = {}, now = Date.now() }) 
     degraded,
     changes: changes.length,
     history: [...state.history].reverse().slice(0, 50),
-    email: { configured: !!mailer.configured, last: state.lastEmail || null },
+    email: { configured: !!mailer.configured, paused: !!mailer.paused, last: state.lastEmail || null },
   };
 
   await kv.put('state', state);
@@ -202,6 +202,8 @@ function glmSummary(glm) {
 
 async function sendSafely(mailer, email) {
   if (!mailer || !mailer.configured) return { ok: false, skipped: true, error: 'Correo no configurado' };
+  // En pausa: el cambio queda en el historial, pero no se envía ni se reintenta después
+  if (mailer.paused) return { ok: false, skipped: true, error: 'Correos en pausa' };
   try {
     return await mailer.send(email);
   } catch (e) {
