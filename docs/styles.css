@@ -165,6 +165,41 @@ main.sin-datos > :not(#hero) { display: none; }
 }
 .chip svg { flex: none; }
 
+/* --- Alerta temprana (al inicio) -------------------------------------------- */
+
+.early {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  display: grid;
+  gap: 10px;
+}
+.early-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.early-head h2 { margin: 0; font-size: 19px; }
+.early-head .muted { font-size: 13px; }
+.early-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.early-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--lvl) 9%, var(--surface));
+  border-left: 5px solid var(--lvl);
+}
+.early-item.lvl-0 { background: var(--surface-2); border-left-color: var(--axis); }
+.early-item .hz-icon { color: var(--ink); padding-top: 2px; }
+.early-item p { margin: 4px 0 0; }
+.early-item.main p { font-size: 16px; }
+.early-when { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.early-when strong { font-size: 16px; }
+.early-time { font-weight: 700; font-size: 15px; padding: 1px 9px; border-radius: 999px; background: var(--ink); color: var(--surface); font-variant-numeric: tabular-nums; }
+.conf { font-size: 12px; color: var(--ink-2); border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; background: var(--surface); }
+.conf.live { color: var(--ink); font-weight: 700; border-color: var(--ink-2); }
+.early-none { margin: 0; color: var(--ink-2); }
+
 /* --- Estado general ------------------------------------------------------- */
 
 .hero {

@@ -44,6 +44,15 @@ En el teléfono: abre la dirección del panel y elige **Instalar app** (Android)
 | [MET Norway](https://api.met.no) | Un séptimo pronóstico | Pronóstico |
 | [Meteored · Mapa de avisos](https://www.meteored.cl/avisos-meteorologicos/) | Mapa interactivo de avisos de todo Chile, integrado en el panel | Visual |
 
+### Alerta temprana
+
+Al inicio del panel (y de cada correo) se indica **cuándo podría empezar** cada fenómeno y
+**según qué fuentes**, con una cuenta regresiva y un nivel de confianza. Por ejemplo: *"Podría iniciar
+una tormenta eléctrica en el cerro mañana a las 15:00, según ICON (15:00). La DMC mantiene un aviso
+de tormentas eléctricas hasta el miércoles 21 a las 00:00."* Si ya se observan rayos o tormenta en
+las estaciones, aparece primero como **en curso**. La confianza es *alta* cuando coincide la mitad o
+más de las fuentes (o hay respaldo oficial), *media* con 2 fuentes y *baja* con una sola.
+
 ### Comparación de fuentes
 
 El panel muestra qué pronostica **cada fuente** para las próximas 72 horas, con cuatro

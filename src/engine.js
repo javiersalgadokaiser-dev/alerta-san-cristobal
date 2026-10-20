@@ -1,3 +1,4 @@
+import { upcomingEvents } from './upcoming.js';
 import { HOUR, LEVELS, isNum, levelAbove, levelBelow, maxOf, maxWindowSum, median, minOf, round, sumOf } from './util.js';
 
 // Los textos no incluyen fechas formateadas: las horas van como números (start,
@@ -278,6 +279,8 @@ export function evaluate({ now, forecasts = [], metars = [], tafs = [], dmcAlert
       hazardId: main.level > 0 ? main.id : null,
       headline: main.level > 0 ? `${main.name}: ${main.headline}` : 'Sin alertas para las próximas 72 horas',
     },
+    // Alerta temprana: cuándo podría empezar cada fenómeno y según qué fuentes
+    upcoming: upcomingEvents({ now, grid, fc, observations, tafs, dmcAlerts, glm, cfg }),
     timeline,
     perSource,
     // Lo que pronostica cada fuente hora a hora, para comparar en el panel

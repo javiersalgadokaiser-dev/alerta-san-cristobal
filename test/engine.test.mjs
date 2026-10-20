@@ -206,3 +206,37 @@ test('base64 sin Buffer ni btoa', () => {
     assert.equal(base64Encode(bytes), Buffer.from(bytes).toString('base64'));
   }
 });
+
+// --- Alerta temprana: cuándo podría empezar cada fenómeno ------------------------
+
+const upcoming = (args) => evaluate({ now: NOW, cfg, ...args }).upcoming;
+
+test('Alerta temprana: tormenta con hora de inicio y fuentes que coinciden', () => {
+  const f = [...calm(4), model('ICON', (h) => ({ thunder: h >= 5 && h <= 7 })), model('GFS', (h) => ({ thunder: h >= 6 && h <= 8 }))];
+  const [e] = upcoming({ forecasts: f });
+  assert.equal(e.hazardId, 'tormenta');
+  assert.equal(e.start, Math.floor(NOW / HOUR) * HOUR + 5 * HOUR);
+  assert.match(e.text, /^Podría iniciar una tormenta eléctrica en el cerro hoy a las 20:00, según ICON \(20:00\) y GFS \(21:00\)\./);
+  assert.match(e.text, /Mayor coincidencia hoy a las 21:00 \(2 de 6 fuentes\)/);
+  assert.equal(e.confidence, 'media');
+});
+
+test('Alerta temprana: una tormenta observada va primero y se marca en curso', () => {
+  const list = upcoming({ forecasts: calm(6), metars: [metar('METAR SCTB 201750Z 27010KT 9999 TS FEW040CB 18/09 Q1010')] });
+  assert.equal(list[0].hazardId, 'tormenta');
+  assert.equal(list[0].confidence, 'en curso');
+  assert.match(list[0].text, /^Hay actividad eléctrica cerca del cerro: tormenta observada en Tobalaba/);
+});
+
+test('Alerta temprana: inicio de la lluvia y total esperado', () => {
+  const f = Array.from({ length: 5 }, (_, i) => model(`r${i}`, (h) => ({ precip: h >= 10 && h < 20 ? 1.5 : 0 })));
+  const [e] = upcoming({ forecasts: f });
+  assert.equal(e.hazardId, 'lluvia');
+  assert.match(e.text, /^Podría empezar a llover mañana a la 01:00, según 5 de 5 fuentes/);
+  assert.match(e.text, /con unos 15 mm en total/);
+  assert.equal(e.confidence, 'alta');
+});
+
+test('Alerta temprana: sin señales no hay avisos', () => {
+  assert.deepEqual(upcoming({ forecasts: calm(6) }), []);
+});

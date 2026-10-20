@@ -158,6 +158,7 @@ export async function runCheck({ kv, mailer, settings = {}, now = Date.now() }) 
     horizonHours: HORIZON_HOURS,
     thresholds: cfg.THRESHOLDS,
     overall: result.overall,
+    upcoming: result.upcoming,
     hazards: result.hazards,
     hazardOrder: HAZARDS.map((h) => h.id),
     timeline: result.timeline,

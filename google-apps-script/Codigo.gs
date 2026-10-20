@@ -367,10 +367,197 @@ var AlertaSC = (() => {
     const opts = withDay ? { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" } : { hour: "2-digit", minute: "2-digit", hourCycle: "h23" };
     return formatter(tz, opts).format(new Date(ms)).replace(/\./g, "");
   }
+  function formatWhen(ms, now, tz) {
+    if (!isNum(ms)) return "";
+    if (ms <= now) return "ahora";
+    const day = (t) => formatter(tz, { year: "numeric", month: "numeric", day: "numeric" }).format(new Date(t));
+    const time = formatLocal(ms, tz, { withDay: false });
+    const at = `${time.startsWith("01:") ? "a la" : "a las"} ${time}`;
+    if (day(ms) === day(now)) return `hoy ${at}`;
+    if (day(ms) === day(now + 24 * HOUR)) return `mañana ${at}`;
+    return `el ${formatter(tz, { weekday: "long", day: "numeric" }).format(new Date(ms))} ${at}`;
+  }
   function formatRange(start, end, tz) {
     if (!isNum(start)) return "";
     if (!isNum(end) || end <= start) return `desde ${formatLocal(start, tz)}`;
     return `${formatLocal(start, tz)} → ${formatLocal(end, tz)}`;
+  }
+
+  // src/upcoming.js
+  var CONFIDENCE = ["baja", "media", "alta"];
+  var list = (items) => items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} y ${items[items.length - 1]}`;
+  function firstEpisode(fc, grid, flag, minSources = 1, gapHours = 2) {
+    const count = grid.map((_, h) => fc.filter((s) => flag(s, h) === true).length);
+    const avail = grid.map((_, h) => fc.filter((s) => flag(s, h) != null).length);
+    const start = count.findIndex((c) => c >= minSources);
+    if (start < 0) return null;
+    let end = start;
+    let gap = 0;
+    for (let h = start + 1; h < grid.length; h++) {
+      if (count[h] > 0) {
+        end = h;
+        gap = 0;
+      } else if (++gap > gapHours) break;
+    }
+    let peak = start;
+    for (let h = start; h <= end; h++) if (count[h] > count[peak]) peak = h;
+    const supporters = fc.map((s) => {
+      for (let h = start; h <= end; h++) if (flag(s, h) === true) return { id: s.id, name: s.name, first: grid[h] };
+      return null;
+    }).filter(Boolean).sort((a, b) => a.first - b.first);
+    const n = Math.max(...avail.slice(start, end + 1));
+    const peakCount = count[peak];
+    const confidence = peakCount >= Math.max(3, Math.ceil(n / 2)) ? 2 : peakCount >= 2 ? 1 : 0;
+    return { startIdx: start, endIdx: end, start: grid[start], end: grid[end] + HOUR, peak: grid[peak], peakCount, n, supporters, confidence };
+  }
+  function upcomingEvents({ now, grid, fc, observations = [], tafs = [], dmcAlerts = [], glm = null, cfg }) {
+    const tz = cfg.LOCATION.timezone;
+    const T = cfg.THRESHOLDS;
+    const when = (t) => formatWhen(t, now, tz);
+    const hhmm = (t) => formatLocal(t, tz, { withDay: false });
+    const N = fc.length;
+    const events = [];
+    const official = (hazard) => dmcAlerts.filter((a) => a.hazard === hazard && a.start && (a.end == null || a.end > now));
+    const station = (name) => name.replace(/ \(.*\)/, "");
+    const raise = (c, by) => Math.min(2, c + by);
+    const push = (e) => {
+      if (e.start == null || e.start > grid[grid.length - 1] + HOUR) return;
+      events.push({ ...e, confidence: e.observed ? "en curso" : CONFIDENCE[e.confidence] });
+    };
+    {
+      const seen = [];
+      for (const m of observations) {
+        if (m.thunder) seen.push(`tormenta observada en ${station(m.name)} (${m.distKm} km)`);
+        else if (m.thunderNear) seen.push(`tormenta en las cercanías de ${station(m.name)}`);
+      }
+      if (glm && now - glm.time <= cfg.GLM.maxAgeMinutes * 6e4) {
+        const c = glm.clusters.find((x) => x.distKm <= cfg.GLM.radiiKm[1]);
+        if (c) seen.push(`rayos a ${c.distKm} km al ${c.direction} (satélite, imagen de las ${hhmm(glm.time)})`);
+      }
+      const ev = firstEpisode(fc, grid, (s, h) => s.thunder[h] === null ? null : s.thunder[h] === true, 1);
+      const taf = tafs.flatMap(
+        (t) => t.periods.filter((p) => p.thunder && p.to > now).map((p) => ({ name: `el pronóstico aeronáutico de ${station(t.name)}`, from: Math.max(p.from, now), prob: p.probability }))
+      );
+      const dmc = official("tormenta");
+      if (seen.length || ev || taf.length || dmc.length) {
+        let start = ev ? ev.start : null;
+        for (const p of taf) start = start == null ? p.from : Math.min(start, p.from);
+        if (start == null) start = Math.max(now, Math.min(...dmc.map((a) => a.start)));
+        let text;
+        const who = [
+          ...ev ? ev.supporters.map((s) => `${s.name} (${hhmm(s.first)})`) : [],
+          ...taf.map((p) => `${p.name} (${hhmm(p.from)}${p.prob ? `, ${p.prob} %` : ""})`)
+        ];
+        if (seen.length) {
+          start = now;
+          text = `Hay actividad eléctrica cerca del cerro: ${list(seen)}.`;
+          if (who.length) text += ` Los pronósticos la mantienen según ${list(who)}.`;
+        } else if (who.length) {
+          text = `Podría iniciar una tormenta eléctrica en el cerro ${when(start)}, según ${list(who)}.`;
+          if (ev && ev.peakCount >= 2 && ev.peak !== ev.start) text += ` Mayor coincidencia ${when(ev.peak)} (${ev.peakCount} de ${ev.n} fuentes).`;
+        } else {
+          text = `La DMC advierte tormentas eléctricas probables ${start <= now ? "desde ahora" : `desde ${when(start)}`}.`;
+        }
+        if (dmc.length && (seen.length || who.length)) {
+          text += ` La DMC mantiene ${list(dmc.map((a) => `un ${a.type.toLowerCase()} de tormentas eléctricas hasta ${when(a.end)}`))}.`;
+        }
+        let confidence = ev ? ev.confidence : 1;
+        if (taf.length) confidence = raise(confidence, 1);
+        if (dmc.length && (ev || taf.length)) confidence = raise(confidence, 1);
+        push({
+          hazardId: "tormenta",
+          start,
+          end: ev ? ev.end : null,
+          peak: ev ? ev.peak : null,
+          observed: seen.length > 0,
+          confidence,
+          sources: [...ev ? ev.supporters.map((s) => s.name) : [], ...taf.length ? ["TAF"] : [], ...dmc.length ? ["DMC"] : []],
+          text
+        });
+      }
+    }
+    {
+      const raining = observations.filter((m) => m.rain || m.heavyRain).map((m) => station(m.name));
+      const ev = firstEpisode(fc, grid, (s, h) => s.precip[h] == null ? null : s.precip[h] >= 0.5, 2);
+      const dmc = official("lluvia");
+      if (raining.length || ev || dmc.length) {
+        let text;
+        let start = ev ? ev.start : null;
+        if (ev) {
+          const total = round(median(fc.map((s) => s.precip.slice(ev.startIdx, ev.endIdx + 1).reduce((a, v) => a + (v || 0), 0))));
+          text = `Podría empezar a llover ${when(ev.start)}, según ${ev.supporters.length} de ${N} fuentes. Seguiría hasta ${when(ev.end)}, con unos ${total} mm en total.`;
+        }
+        if (raining.length) {
+          start = now;
+          text = `Ya llueve en ${list(raining)}.${text ? ` ${text}` : ""}`;
+        }
+        if (dmc.length) {
+          const a = dmc[0];
+          const dmcText = `La DMC tiene ${a.type === "Alerta" ? "una" : "un"} ${a.type.toLowerCase()} por precipitaciones${a.detail ? ` (${a.detail})` : ""} desde ${when(a.start)} hasta ${when(a.end)}.`;
+          text = text ? `${text} ${dmcText}` : dmcText;
+          if (start == null) start = Math.max(now, a.start);
+        }
+        push({
+          hazardId: "lluvia",
+          start,
+          end: ev ? ev.end : null,
+          peak: ev ? ev.peak : null,
+          observed: raining.length > 0,
+          confidence: raise(ev ? ev.confidence : 1, dmc.length && ev ? 1 : 0),
+          sources: [...ev ? ev.supporters.map((s) => s.name) : [], ...dmc.length ? ["DMC"] : []],
+          text
+        });
+      }
+    }
+    const simple = [
+      {
+        hazardId: "viento",
+        flag: (s, h) => s.gust[h] == null ? null : s.gust[h] >= T.gust[0],
+        phrase: (start) => `Podrían registrarse ráfagas sobre ${T.gust[0]} km/h ${when(start)}`,
+        extra: (ev) => {
+          const max = Math.max(...fc.map((s) => Math.max(0, ...s.gust.slice(ev.startIdx, ev.endIdx + 1).filter((v) => v != null))));
+          return ` (hasta ${round(max)} km/h)`;
+        }
+      },
+      {
+        hazardId: "nieve",
+        flag: (s, h) => s.snow[h] == null ? null : s.snow[h] >= 0.1,
+        phrase: (start) => `Podría nevar en el cerro ${when(start)}`
+      },
+      {
+        hazardId: "calor",
+        flag: (s, h) => s.temp[h] == null ? null : s.temp[h] >= T.heat[0],
+        phrase: (start) => `La temperatura podría superar los ${T.heat[0]} °C ${when(start)}`
+      },
+      {
+        hazardId: "helada",
+        flag: (s, h) => s.temp[h] == null ? null : s.temp[h] <= T.frost[0],
+        phrase: (start) => `La temperatura podría bajar de ${T.frost[0]} °C ${when(start)}`
+      }
+    ];
+    for (const k of simple) {
+      const ev = firstEpisode(fc, grid, k.flag, 1);
+      const dmc = official(k.hazardId);
+      if (!ev && !dmc.length) continue;
+      let text = ev ? `${k.phrase(ev.start)}, según ${list(ev.supporters.map((s) => `${s.name} (${hhmm(s.first)})`))}${k.extra ? k.extra(ev) : ""}.` : "";
+      if (dmc.length) {
+        const a = dmc[0];
+        const dmcText = `La DMC tiene ${a.type === "Alerta" ? "una" : "un"} ${a.type.toLowerCase()} por ${a.phenomenon.toLowerCase()} desde ${when(a.start)} hasta ${when(a.end)}.`;
+        text = text ? `${text} ${dmcText}` : dmcText;
+      }
+      push({
+        hazardId: k.hazardId,
+        start: ev ? ev.start : Math.max(now, dmc[0].start),
+        end: ev ? ev.end : null,
+        peak: ev ? ev.peak : null,
+        observed: false,
+        confidence: raise(ev ? ev.confidence : 1, dmc.length && ev ? 1 : 0),
+        sources: [...ev ? ev.supporters.map((s) => s.name) : [], ...dmc.length ? ["DMC"] : []],
+        text
+      });
+    }
+    const rank2 = (e) => e.observed ? 0 : e.hazardId === "tormenta" ? 1 : 2;
+    return events.sort((a, b) => rank2(a) - rank2(b) || a.start - b.start);
   }
 
   // src/engine.js
@@ -612,6 +799,8 @@ var AlertaSC = (() => {
         hazardId: main.level > 0 ? main.id : null,
         headline: main.level > 0 ? `${main.name}: ${main.headline}` : "Sin alertas para las próximas 72 horas"
       },
+      // Alerta temprana: cuándo podría empezar cada fenómeno y según qué fuentes
+      upcoming: upcomingEvents({ now, grid, fc, observations, tafs, dmcAlerts, glm, cfg }),
       timeline,
       perSource,
       // Lo que pronostica cada fuente hora a hora, para comparar en el panel
@@ -741,6 +930,12 @@ var AlertaSC = (() => {
   <ul style="margin:6px 0 0;padding-left:18px;font-size:14px">${ev}</ul>
 </div>`;
     }).join("") : '<p style="margin:8px 0">Sin peligros activos para las próximas 72 horas.</p>';
+    const upcoming = result.upcoming || [];
+    const emojiOf = (id) => (result.hazards.find((x) => x.id === id) || {}).emoji || "⚠️";
+    const upcomingHtml = upcoming.length ? `<div style="margin:14px 20px 0;padding:10px 14px;background:#f3f2ee;border-radius:8px">
+    <div style="font-weight:700;margin-bottom:4px">Alerta temprana</div>
+    ${upcoming.map((u) => `<p style="margin:6px 0;font-size:14px">${emojiOf(u.hazardId)} ${escapeHtml(u.text)} <span style="color:#52514e">(confianza ${escapeHtml(u.confidence)})</span></p>`).join("")}
+  </div>` : "";
     const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;background:#f3f2ee;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#0b0b0b">
 <div style="max-width:600px;margin:0 auto;background:#fcfcfb">
   <div style="border-top:8px solid ${color};padding:18px 20px 6px">
@@ -748,6 +943,7 @@ var AlertaSC = (() => {
     <div style="font-size:22px;font-weight:700;margin-top:4px">${LEVELS[overall.level].emoji} ${escapeHtml(LEVELS[overall.level].name)}</div>
     <div style="font-size:15px;margin-top:4px">${escapeHtml(overall.headline)}</div>
   </div>
+  ${upcomingHtml}
   <div style="padding:6px 20px 18px">
     <p style="margin:12px 0 6px">${escapeHtml(intro)}</p>
     ${lines.length ? `<ul style="padding-left:18px;margin:0">${lines.map((l) => `<li style="margin:6px 0">${escapeHtml(l)}</li>`).join("")}</ul>` : ""}
@@ -761,6 +957,7 @@ var AlertaSC = (() => {
     const text = [
       `${LEVELS[overall.level].name.toUpperCase()} — ${overall.headline}`,
       "",
+      ...upcoming.length ? ["Alerta temprana:", ...upcoming.map((u) => `- ${u.text} (confianza ${u.confidence})`), ""] : [],
       intro,
       ...lines.map((l) => `- ${l}`),
       "",
@@ -789,12 +986,12 @@ Panel: ${dashboardUrl}` : ""
   var KT_TO_KMH = 1.852;
   var NAMES = { SCTB: "Tobalaba", SCEL: "Pudahuel (aeropuerto)", SCBQ: "El Bosque" };
   async function fetchMetars(ids, location) {
-    const list = await fetchJson(`${API}/metar?ids=${ids.join(",")}&format=json&hours=3`);
-    return (Array.isArray(list) ? list : []).map((m) => parseMetar(m, location));
+    const list2 = await fetchJson(`${API}/metar?ids=${ids.join(",")}&format=json&hours=3`);
+    return (Array.isArray(list2) ? list2 : []).map((m) => parseMetar(m, location));
   }
   async function fetchTafs(ids) {
-    const list = await fetchJson(`${API}/taf?ids=${ids.join(",")}&format=json`);
-    return (Array.isArray(list) ? list : []).map(parseTaf);
+    const list2 = await fetchJson(`${API}/taf?ids=${ids.join(",")}&format=json`);
+    return (Array.isArray(list2) ? list2 : []).map(parseTaf);
   }
   function parseMetar(m, location) {
     var _a, _b, _c, _d;
@@ -3506,6 +3703,7 @@ Panel: ${dashboardUrl}` : ""
       horizonHours: HORIZON_HOURS2,
       thresholds: THRESHOLDS,
       overall: result.overall,
+      upcoming: result.upcoming,
       hazards: result.hazards,
       hazardOrder: HAZARDS.map((h) => h.id),
       timeline: result.timeline,
@@ -3625,8 +3823,8 @@ Panel: ${dashboardUrl}` : ""
     return v ? String(v).trim() : "";
   }
   function recipients() {
-    const list = setting("CORREOS").split(/[,;\s]+/).filter((s) => s.includes("@"));
-    if (list.length) return list;
+    const list2 = setting("CORREOS").split(/[,;\s]+/).filter((s) => s.includes("@"));
+    if (list2.length) return list2;
     const me = Session.getEffectiveUser().getEmail();
     return me ? [me] : [];
   }

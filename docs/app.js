@@ -139,6 +139,57 @@ function evidenceWhen(e) {
 
 // --- Secciones ---------------------------------------------------------------
 
+/** "en 2 h 35 min" hasta el inicio previsto. */
+function countdown(start, observed) {
+  if (observed) return 'ahora';
+  const min = Math.round((start - Date.now()) / 60000);
+  if (min <= 0) return 'en curso';
+  if (min < 60) return `en ${min} min`;
+  const hrs = Math.floor(min / 60);
+  if (hrs < 24) return `en ${hrs} h${min % 60 ? ` ${min % 60} min` : ''}`;
+  return `en ${Math.floor(hrs / 24)} d ${hrs % 24} h`;
+}
+
+/** Alerta temprana: cuándo podría empezar cada fenómeno y según qué fuentes. */
+function renderEarly(d) {
+  const box = $('#early');
+  if (!d.upcoming) {
+    box.hidden = true; // el servidor aún no tiene esta versión
+    return;
+  }
+  box.hidden = false;
+  const byId = Object.fromEntries(d.hazards.map((x) => [x.id, x]));
+  box.replaceChildren(
+    h('div', { class: 'early-head' }, h('h2', { id: 'h-early' }, 'Alerta temprana'), h('span', { class: 'muted' }, 'Cuándo podría empezar cada fenómeno, según las fuentes')),
+    d.upcoming.length
+      ? h(
+          'ul',
+          { class: 'early-list' },
+          d.upcoming.map((u) => {
+            const hz = byId[u.hazardId] ?? { name: u.hazardId, level: 0 };
+            return h(
+              'li',
+              { class: `early-item lvl-${hz.level}${u.hazardId === 'tormenta' ? ' main' : ''}` },
+              h('span', { class: 'hz-icon' }, icon(u.hazardId, 26)),
+              h(
+                'div',
+                {},
+                h(
+                  'div',
+                  { class: 'early-when' },
+                  h('strong', {}, hz.name),
+                  h('span', { class: 'early-time', 'data-start': u.start, 'data-observed': u.observed ? '1' : '' }, countdown(u.start, u.observed)),
+                  h('span', { class: `conf${u.observed ? ' live' : ''}` }, u.observed ? 'En curso' : `Confianza ${u.confidence}`),
+                ),
+                h('p', {}, u.text),
+              ),
+            );
+          }),
+        )
+      : h('p', { class: 'early-none' }, 'No se anticipan tormentas, lluvia, viento fuerte ni temperaturas extremas en las próximas 72 horas.'),
+  );
+}
+
 function renderHero(d) {
   const o = d.overall;
   const main = d.hazards.find((x) => x.id === o.hazardId);
@@ -867,6 +918,7 @@ function render(d) {
   $('#app').classList.remove('sin-datos');
   data = d;
   tz = d.location.timezone;
+  renderEarly(d);
   renderHero(d);
   renderHazards(d);
   renderRayos(d);
@@ -885,6 +937,7 @@ function render(d) {
 
 function updateClock() {
   if (data) $('#updated').textContent = `Actualizado ${ago(data.generatedAt)}`;
+  for (const el of document.querySelectorAll('.early-time')) el.textContent = countdown(Number(el.dataset.start), el.dataset.observed === '1');
 }
 
 function banner(text) {

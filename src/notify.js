@@ -126,6 +126,15 @@ function render({ subject, intro, lines, result, location, dashboardUrl }) {
         .join('')
     : '<p style="margin:8px 0">Sin peligros activos para las próximas 72 horas.</p>';
 
+  const upcoming = result.upcoming || [];
+  const emojiOf = (id) => (result.hazards.find((x) => x.id === id) || {}).emoji || '⚠️';
+  const upcomingHtml = upcoming.length
+    ? `<div style="margin:14px 20px 0;padding:10px 14px;background:#f3f2ee;border-radius:8px">
+    <div style="font-weight:700;margin-bottom:4px">Alerta temprana</div>
+    ${upcoming.map((u) => `<p style="margin:6px 0;font-size:14px">${emojiOf(u.hazardId)} ${escapeHtml(u.text)} <span style="color:#52514e">(confianza ${escapeHtml(u.confidence)})</span></p>`).join('')}
+  </div>`
+    : '';
+
   const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;background:#f3f2ee;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#0b0b0b">
 <div style="max-width:600px;margin:0 auto;background:#fcfcfb">
   <div style="border-top:8px solid ${color};padding:18px 20px 6px">
@@ -133,6 +142,7 @@ function render({ subject, intro, lines, result, location, dashboardUrl }) {
     <div style="font-size:22px;font-weight:700;margin-top:4px">${LEVELS[overall.level].emoji} ${escapeHtml(LEVELS[overall.level].name)}</div>
     <div style="font-size:15px;margin-top:4px">${escapeHtml(overall.headline)}</div>
   </div>
+  ${upcomingHtml}
   <div style="padding:6px 20px 18px">
     <p style="margin:12px 0 6px">${escapeHtml(intro)}</p>
     ${lines.length ? `<ul style="padding-left:18px;margin:0">${lines.map((l) => `<li style="margin:6px 0">${escapeHtml(l)}</li>`).join('')}</ul>` : ''}
@@ -147,6 +157,7 @@ function render({ subject, intro, lines, result, location, dashboardUrl }) {
   const text = [
     `${LEVELS[overall.level].name.toUpperCase()} — ${overall.headline}`,
     '',
+    ...(upcoming.length ? ['Alerta temprana:', ...upcoming.map((u) => `- ${u.text} (confianza ${u.confidence})`), ''] : []),
     intro,
     ...lines.map((l) => `- ${l}`),
     '',

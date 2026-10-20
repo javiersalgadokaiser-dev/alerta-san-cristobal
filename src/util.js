@@ -193,6 +193,18 @@ export function formatLocal(ms, tz, { withDay = true } = {}) {
   return formatter(tz, opts).format(new Date(ms)).replace(/\./g, '');
 }
 
+/** "hoy a las 13:00", "mañana a las 09:00", "el miércoles 21 a las 16:00" (o "ahora"). */
+export function formatWhen(ms, now, tz) {
+  if (!isNum(ms)) return '';
+  if (ms <= now) return 'ahora';
+  const day = (t) => formatter(tz, { year: 'numeric', month: 'numeric', day: 'numeric' }).format(new Date(t));
+  const time = formatLocal(ms, tz, { withDay: false });
+  const at = `${time.startsWith('01:') ? 'a la' : 'a las'} ${time}`;
+  if (day(ms) === day(now)) return `hoy ${at}`;
+  if (day(ms) === day(now + 24 * HOUR)) return `mañana ${at}`;
+  return `el ${formatter(tz, { weekday: 'long', day: 'numeric' }).format(new Date(ms))} ${at}`;
+}
+
 export function formatRange(start, end, tz) {
   if (!isNum(start)) return '';
   if (!isNum(end) || end <= start) return `desde ${formatLocal(start, tz)}`;
