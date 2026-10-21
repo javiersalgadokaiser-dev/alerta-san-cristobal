@@ -150,14 +150,16 @@ export function upcomingEvents({ now, grid, fc, observations = [], tafs = [], dm
   }
 
   // --- Viento, nieve y temperaturas extremas (solo pronóstico) ---------------------
+  // Si alguna fuente llega al nivel de alerta (15 m/s), se avisa desde ese umbral.
+  const windLimit = fc.some((s) => s.gust.some((v) => v != null && v >= T.gust[1])) ? T.gust[1] : T.gust[0];
   const simple = [
     {
       hazardId: 'viento',
-      flag: (s, h) => (s.gust[h] == null ? null : s.gust[h] >= T.gust[0]),
-      phrase: (start) => `Podrían registrarse ráfagas sobre ${T.gust[0]} km/h ${when(start)}`,
+      flag: (s, h) => (s.gust[h] == null ? null : s.gust[h] >= windLimit),
+      phrase: (start) => `Podrían registrarse ráfagas sobre ${windLimit} m/s${windLimit === T.gust[1] ? ' (nivel de alerta)' : ''} ${when(start)}`,
       extra: (ev) => {
         const max = Math.max(...fc.map((s) => Math.max(0, ...s.gust.slice(ev.startIdx, ev.endIdx + 1).filter((v) => v != null))));
-        return ` (hasta ${round(max)} km/h)`;
+        return ` (hasta ${round(max, 1)} m/s)`;
       },
     },
     {

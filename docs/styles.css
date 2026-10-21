@@ -89,28 +89,74 @@ main {
 }
 
 /* Sin esto, una tabla ancha estira la cuadrícula más allá de la pantalla. */
-main > *, .two-col > * { min-width: 0; }
+main > *, .two-col > *, .tab-panel > * { min-width: 0; }
 
 main[aria-busy="true"] .chart-card { opacity: 0.6; }
+
+/* Cada pestaña es una cuadrícula propia; solo se ve la activa */
+.tab-panel { display: grid; gap: 28px; min-width: 0; }
+.tab-panel[hidden] { display: none; }
+
 /* Sin servidor configurado solo se muestra la tarjeta de configuración */
-main.sin-datos > :not(#hero) { display: none; }
+body.sin-datos .tabbar,
+body.sin-datos #overall,
+body.sin-datos #panel-resumen > :not(#storm) { display: none; }
 
-/* --- Barra superior ------------------------------------------------------- */
+/* --- Barra superior y pestañas ------------------------------------------------- */
 
-.topbar {
+.appbar {
   position: sticky;
   top: 0;
   z-index: 5;
+  background: color-mix(in srgb, var(--page) 90%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 16px;
+  padding: 10px 16px 6px;
   padding-top: max(10px, env(safe-area-inset-top));
-  background: color-mix(in srgb, var(--page) 88%, transparent);
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid var(--border);
+  max-width: 1152px;
+  margin: 0 auto;
 }
+
+.overall { cursor: pointer; font: inherit; font-size: 13px; font-weight: 600; margin-left: auto; }
+.overall:hover { filter: brightness(0.97); }
+
+.tabbar {
+  display: flex;
+  gap: 2px;
+  max-width: 1152px;
+  margin: 0 auto;
+  padding: 0 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tabbar::-webkit-scrollbar { display: none; }
+.tabbar [role="tab"] {
+  flex: none;
+  font: inherit;
+  font-size: 14px;
+  padding: 9px 12px 10px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: none;
+  color: var(--ink-2);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tabbar [role="tab"]:hover { color: var(--ink); background: var(--surface-2); border-radius: 8px 8px 0 0; }
+.tabbar [role="tab"][aria-selected="true"] { color: var(--ink); font-weight: 650; border-bottom-color: var(--series); }
+.tabbar [role="tab"]:focus-visible { outline: 2px solid var(--series); outline-offset: -2px; border-radius: 6px; }
+
+.hero-metric { color: var(--ink); }
+.hero-metric strong { font-size: 18px; }
+.hero-signals { margin-top: 8px; }
+.hero-signals .evidence li { background: color-mix(in srgb, var(--surface) 70%, transparent); }
 
 .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .brand img { border-radius: 8px; flex: none; }
@@ -128,7 +174,7 @@ main.sin-datos > :not(#hero) { display: none; }
   border-radius: 8px;
   cursor: pointer;
 }
-.btn { padding: 6px 12px; font-weight: 600; }
+.btn { padding: 6px 12px; font-weight: 600; white-space: nowrap; }
 .btn-icon { display: grid; place-items: center; width: 34px; height: 34px; }
 .btn:hover, .btn-icon:hover { background: var(--surface-2); }
 .btn-icon.spinning svg { animation: spin 0.9s linear infinite; }
@@ -505,4 +551,10 @@ td .line-key { margin-right: 8px; }
 @media (max-width: 480px) {
   #updated { display: none; }
   .hero { flex-direction: column; gap: 10px; }
+  /* El indicador de estado reemplaza al título; queda el ícono de la app */
+  .brand > div { display: none; }
+  .topbar { gap: 8px; }
+  .overall { margin-left: 0; min-width: 0; flex: 1 1 auto; overflow: hidden; }
+  .overall .overall-text { overflow: hidden; text-overflow: ellipsis; }
+  #install { padding: 6px 8px; }
 }

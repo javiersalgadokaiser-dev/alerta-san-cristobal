@@ -86,8 +86,8 @@ un plan de [Open-Meteo](https://open-meteo.com/en/pricing) se evita el límite: 
 | `probarCorreo` | Envía un correo de prueba con el estado actual. |
 | `verEstado` | Muestra en el registro el último estado y si alguna fuente falla. |
 | `desinstalar` | Detiene las revisiones automáticas. |
-| `pausarCorreos` | Deja de enviar correos. Las revisiones y la app siguen funcionando. |
-| `reanudarCorreos` | Vuelve a enviar correos (solo de los cambios que ocurran desde ese momento). |
+| `pausarCorreos` | Deja de enviar los boletines. Las revisiones y la app siguen funcionando. |
+| `reanudarCorreos` | Vuelve a enviar los boletines de las 7:00, 13:00 y 18:00. |
 
 ## Si cambia el código
 

@@ -5,7 +5,7 @@ import { haversineKm, round } from '../util.js';
 // Santiago, vía aviationweather.gov (NOAA). Reportan tormentas ("TS") y nubes
 // cumulonimbus ("CB") observadas por personal de la DMC en cada aeródromo.
 const API = 'https://aviationweather.gov/api/data';
-const KT_TO_KMH = 1.852;
+const KT_TO_MS = 0.514444;
 
 const NAMES = { SCTB: 'Tobalaba', SCEL: 'Pudahuel (aeropuerto)', SCBQ: 'El Bosque' };
 
@@ -38,8 +38,8 @@ export function parseMetar(m, location) {
     time: m.obsTime * 1000,
     raw,
     temp: m.temp ?? null,
-    windKmh: wind ? round(Number(wind[2]) * KT_TO_KMH) : null,
-    gustKmh: wind?.[3] ? round(Number(wind[3]) * KT_TO_KMH) : null,
+    windMs: wind ? round(Number(wind[2]) * KT_TO_MS, 1) : null,
+    gustMs: wind?.[3] ? round(Number(wind[3]) * KT_TO_MS, 1) : null,
     thunder: has(/^[+-]?TS/), // tormenta en la estación
     thunderNear: has(/^VCTS/), // tormenta en las cercanías (8-16 km)
     thunderRecent: has(/^RETS/), // tormenta en la última hora
@@ -62,7 +62,7 @@ export function parseTaf(t) {
     wx: f.wxString ?? '',
     thunder: /(^|\s)[+-]?(VC)?TS/.test(f.wxString ?? ''),
     cb: (f.clouds ?? []).some((c) => c.type === 'CB'),
-    gustKmh: f.wgst ? round(f.wgst * KT_TO_KMH) : null,
+    gustMs: f.wgst ? round(f.wgst * KT_TO_MS, 1) : null,
   }));
   return {
     station: t.icaoId,
@@ -70,6 +70,6 @@ export function parseTaf(t) {
     issued: Date.parse(t.issueTime),
     validTo: t.validTimeTo * 1000,
     raw: t.rawTAF,
-    periods: periods.filter((p) => p.thunder || p.cb || p.gustKmh),
+    periods: periods.filter((p) => p.thunder || p.cb || p.gustMs),
   };
 }

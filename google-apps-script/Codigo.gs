@@ -111,6 +111,7 @@ var AlertaSC = (() => {
   // src/config.js
   var config_exports = {};
   __export(config_exports, {
+    CACHE_VERSION: () => CACHE_VERSION,
     DMC: () => DMC,
     GLM: () => GLM,
     HORIZON_HOURS: () => HORIZON_HOURS,
@@ -181,8 +182,11 @@ var AlertaSC = (() => {
     // mm acumulados en 24 h (mediana entre modelos)
     rain1h: [4, 8, 15],
     // mm en una hora
-    gust: [50, 70, 90],
-    // km/h, ráfaga máxima
+    // m/s, ráfaga máxima (lo que mide un anemómetro en un instante). Alerta a 15 m/s.
+    gust: [12, 15, 20],
+    // Índice UV (escala OMS: 6-7 alto, 8-10 muy alto, 11+ extremo). Llega a Alerta como
+    // máximo: es predecible y se maneja con protección, no detiene la operación.
+    uv: [8, 11, 99],
     snow24h: [0.5, 5, 15],
     // cm en 24 h
     heat: [33, 36, 39],
@@ -198,11 +202,17 @@ var AlertaSC = (() => {
   };
   var OPEN_METEO_CACHE_MINUTES = 60;
   var NOTIFY = {
-    // Horas que un peligro debe mantenerse en un nivel menor antes de avisar que
-    // bajó o terminó. Evita correos repetidos cuando un pronóstico oscila.
+    // Horas que un peligro debe mantenerse en un nivel menor antes de registrar que
+    // bajó o terminó. Evita avisos repetidos cuando un pronóstico oscila.
     downgradeAfterHours: 3,
-    historySize: 100
+    historySize: 100,
+    // Los correos se envían solo a estas horas (hora de Santiago), como un boletín con
+    // el estado actual, la alerta temprana y los cambios desde el boletín anterior.
+    bulletinHours: [7, 13, 18],
+    // Si a la hora exacta no se pudo enviar, se reintenta durante estos minutos.
+    bulletinWindowMinutes: 60
   };
+  var CACHE_VERSION = 2;
 
   // src/util.js
   var HOUR = 36e5;
@@ -359,6 +369,9 @@ var AlertaSC = (() => {
     });
     const p = Object.fromEntries(f.formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
     return { y: +p.year, mo: +p.month, d: +p.day, h: +p.hour, mi: +p.minute, s: +p.second };
+  }
+  function localParts(ms, tz) {
+    return partsAt(ms, tz);
   }
   function tzOffsetMs(ms, tz) {
     const p = partsAt(ms, tz);
@@ -519,14 +532,15 @@ var AlertaSC = (() => {
         });
       }
     }
+    const windLimit = fc.some((s) => s.gust.some((v) => v != null && v >= T.gust[1])) ? T.gust[1] : T.gust[0];
     const simple = [
       {
         hazardId: "viento",
-        flag: (s, h) => s.gust[h] == null ? null : s.gust[h] >= T.gust[0],
-        phrase: (start) => `Podrían registrarse ráfagas sobre ${T.gust[0]} km/h ${when(start)}`,
+        flag: (s, h) => s.gust[h] == null ? null : s.gust[h] >= windLimit,
+        phrase: (start) => `Podrían registrarse ráfagas sobre ${windLimit} m/s${windLimit === T.gust[1] ? " (nivel de alerta)" : ""} ${when(start)}`,
         extra: (ev) => {
           const max = Math.max(...fc.map((s) => Math.max(0, ...s.gust.slice(ev.startIdx, ev.endIdx + 1).filter((v) => v != null))));
-          return ` (hasta ${round(max)} km/h)`;
+          return ` (hasta ${round(max, 1)} m/s)`;
         }
       },
       {
@@ -566,8 +580,8 @@ var AlertaSC = (() => {
         text
       });
     }
-    const rank2 = (e) => e.observed ? 0 : e.hazardId === "tormenta" ? 1 : 2;
-    return events.sort((a, b) => rank2(a) - rank2(b) || a.start - b.start);
+    const rank = (e) => e.observed ? 0 : e.hazardId === "tormenta" ? 1 : 2;
+    return events.sort((a, b) => rank(a) - rank(b) || a.start - b.start);
   }
 
   // src/engine.js
@@ -579,9 +593,11 @@ var AlertaSC = (() => {
     { id: "nieve", name: "Nieve", emoji: "❄️" },
     { id: "calor", name: "Calor extremo", emoji: "🌡️" },
     { id: "helada", name: "Helada", emoji: "🧊" },
+    { id: "uv", name: "Radiación UV", emoji: "☀️" },
     { id: "otro", name: "Otros avisos DMC", emoji: "⚠️" }
   ];
-  var FIELDS = ["temp", "precip", "thunder", "cape", "gust", "wind", "snow"];
+  var FIELDS = ["temp", "precip", "thunder", "cape", "gust", "wind", "snow", "uv"];
+  var uvCategory = (v) => v >= 11 ? "extremo" : v >= 8 ? "muy alto" : v >= 6 ? "alto" : v >= 3 ? "moderado" : "bajo";
   function align(src, grid) {
     const index = new Map(src.times.map((t, i) => [t, i]));
     const out = { id: src.id, name: src.name, origin: src.origin, provider: src.provider };
@@ -612,7 +628,7 @@ var AlertaSC = (() => {
     const timeline = grid.map((t, h) => {
       const vals = (k) => fc.map((s) => s[k][h]).filter(isNum);
       const th = fc.map((s) => s.thunder[h]).filter((v) => v !== null);
-      const [pr, gu, ca, te] = [vals("precip"), vals("gust"), vals("cape"), vals("temp")];
+      const [pr, gu, ca, te, uv] = [vals("precip"), vals("gust"), vals("cape"), vals("temp"), vals("uv")];
       return {
         t,
         thunderK: th.filter(Boolean).length,
@@ -622,9 +638,10 @@ var AlertaSC = (() => {
         precipMed: round(median(pr), 1),
         precipMin: round(minOf(pr), 1),
         precipMax: round(maxOf(pr), 1),
-        gustMed: round(median(gu)),
-        gustMin: round(minOf(gu)),
-        gustMax: round(maxOf(gu)),
+        gustMed: round(median(gu), 1),
+        gustMin: round(minOf(gu), 1),
+        gustMax: round(maxOf(gu), 1),
+        uvMax: round(maxOf(uv), 1),
         tempMed: round(median(te), 1)
       };
     });
@@ -636,7 +653,8 @@ var AlertaSC = (() => {
       rain24: round(maxWindowSum(s.precip, 24).value, 1),
       rain1h: round(maxOf(s.precip), 1),
       rainTotal: round(sumOf(s.precip), 1),
-      gust: round(maxOf(s.gust)),
+      gust: round(maxOf(s.gust), 1),
+      uv: round(maxOf(s.uv), 1),
       thunderHours: s.thunder.filter(Boolean).length,
       cape: round(maxOf(s.cape)),
       tmax: round(maxOf(s.temp), 1),
@@ -691,8 +709,8 @@ var AlertaSC = (() => {
         ...w
       });
     }
-    const gust = round(consensus("gust"));
-    metric.viento = { value: isNum(gust) ? `${gust} km/h` : "–", label: "ráfaga máx. (mediana)" };
+    const gust = round(consensus("gust"), 1);
+    metric.viento = { value: isNum(gust) ? `${gust} m/s` : "–", label: "ráfaga máx. (mediana)" };
     if (isNum(gust)) {
       const [lo, hi] = range("gust");
       const level = levelAbove(gust, T.gust);
@@ -701,7 +719,7 @@ var AlertaSC = (() => {
         source: "Modelos numéricos",
         kind: "pronóstico",
         level,
-        text: `Ráfagas de hasta ${gust} km/h (entre ${lo} y ${hi} km/h según las fuentes)`,
+        text: `Ráfagas de hasta ${gust} m/s (entre ${lo} y ${hi} m/s según las fuentes)`,
         ...w
       });
     }
@@ -727,6 +745,22 @@ var AlertaSC = (() => {
       const w = windowOf(timeline, (x) => x.tempMed <= T.frost[0], (x) => -x.tempMed);
       add("helada", { source: "Modelos numéricos", kind: "pronóstico", level: levelBelow(tmin, T.frost), text: `Mínima de ${tmin} °C`, ...w });
     }
+    const uvMax = maxOf(perSource.map((p) => p.uv));
+    metric.uv = {
+      value: isNum(uvMax) ? `${round(uvMax)}` : "–",
+      label: isNum(uvMax) ? `índice máximo (${uvCategory(uvMax)})` : "sin datos"
+    };
+    if (isNum(uvMax)) {
+      const who = perSource.filter((p) => isNum(p.uv)).map((p) => `${p.name} ${round(p.uv)}`);
+      const w = windowOf(timeline, (x) => x.uvMax >= Math.min(6, uvMax), (x) => x.uvMax);
+      add("uv", {
+        source: "Modelos numéricos",
+        kind: "pronóstico",
+        level: levelAbove(uvMax, T.uv),
+        text: `Índice UV de hasta ${round(uvMax)} (${uvCategory(uvMax)}) según ${who.join(" y ")}`,
+        ...w
+      });
+    }
     const latest = /* @__PURE__ */ new Map();
     for (const m of metars) {
       if (now - m.time > cfg.STATIONS.maxAgeMinutes * 6e4) continue;
@@ -743,7 +777,7 @@ var AlertaSC = (() => {
       if (m.thunderTrend) add("tormenta", { ...obs, level: 2, text: `${m.name} prevé tormenta en las próximas 2 horas` });
       if (m.cb && !m.thunder) add("tormenta", { ...obs, level: near ? 2 : 1, text: `Nubes cumulonimbus (de tormenta) sobre ${m.name}` });
       if (m.heavyRain) add("lluvia", { ...obs, level: 1, text: `Lluvia intensa observada en ${m.name}` });
-      if (m.gustKmh) add("viento", { ...obs, level: levelAbove(m.gustKmh, T.gust), text: `Ráfaga de ${m.gustKmh} km/h en ${m.name}` });
+      if (m.gustMs) add("viento", { ...obs, level: levelAbove(m.gustMs, T.gust), text: `Ráfaga de ${m.gustMs} m/s en ${m.name}` });
     }
     if (glm && now - glm.time <= cfg.GLM.maxAgeMinutes * 6e4) {
       const R = cfg.GLM.radiiKm;
@@ -768,7 +802,7 @@ var AlertaSC = (() => {
         const prob = p.probability ? ` (probabilidad ${p.probability}%)` : "";
         if (p.thunder) add("tormenta", { ...base, level: p.probability && p.probability <= 30 ? 1 : 2, text: `Pronóstico de tormenta en ${taf.name}${prob}` });
         else if (p.cb) add("tormenta", { ...base, level: 1, text: `Pronóstico de cumulonimbus en ${taf.name}${prob}` });
-        if (p.gustKmh) add("viento", { ...base, level: Math.min(2, levelAbove(p.gustKmh, T.gust)), text: `Ráfagas de ${p.gustKmh} km/h en ${taf.name}${prob}` });
+        if (p.gustMs) add("viento", { ...base, level: Math.min(2, levelAbove(p.gustMs, T.gust)), text: `Ráfagas de ${p.gustMs} m/s en ${taf.name}${prob}` });
       }
     }
     for (const a of dmcAlerts) {
@@ -819,7 +853,8 @@ var AlertaSC = (() => {
         name: s.name,
         origin: s.origin,
         precip: s.precip.map((v) => round(v, 1)),
-        gust: s.gust.map((v) => round(v)),
+        gust: s.gust.map((v) => round(v, 1)),
+        uv: s.uv.map((v) => round(v, 1)),
         temp: s.temp.map((v) => round(v, 1)),
         thunder: s.thunder.map((v) => v === null ? null : v ? 1 : 0)
       })),
@@ -865,10 +900,28 @@ var AlertaSC = (() => {
     const dmcSeen = [.../* @__PURE__ */ new Set([...(_d = state.dmcSeen) != null ? _d : [], ...dmcAlerts.map((a) => a.key)])].slice(-300);
     return { changes, notified, dmcSeen };
   }
-  var rank = (c) => {
-    var _a;
-    return { sube: 10, dmc: 10, baja: 5, fin: 1 }[c.type] + ((_a = c.to) != null ? _a : 0);
-  };
+  var pad2 = (n) => String(n).padStart(2, "0");
+  function dueBulletin(now, lastKey, { bulletinHours, bulletinWindowMinutes }, tz) {
+    const p = localParts(now, tz);
+    for (const hour of [...bulletinHours].sort((a, b) => b - a)) {
+      const slot = localToUtc(p.y, p.mo, p.d, hour, tz);
+      if (slot <= now && now - slot < bulletinWindowMinutes * 6e4) {
+        const key = `${p.y}-${pad2(p.mo)}-${pad2(p.d)} ${pad2(hour)}:00`;
+        return key === lastKey ? null : { key, label: `${pad2(hour)}:00` };
+      }
+    }
+    return null;
+  }
+  function nextBulletin(now, { bulletinHours }, tz) {
+    const p = localParts(now, tz);
+    const hours = [...bulletinHours].sort((a, b) => a - b);
+    for (const hour of hours) {
+      const slot = localToUtc(p.y, p.mo, p.d, hour, tz);
+      if (slot > now) return slot;
+    }
+    const t = localParts(now + 24 * HOUR, tz);
+    return localToUtc(t.y, t.mo, t.d, hours[0], tz);
+  }
   function describeChange(c, result, dmcAlerts, tz) {
     var _a, _b, _c;
     const h = (_a = result.hazards.find((x) => x.id === c.hazardId)) != null ? _a : { name: "Aviso DMC", emoji: "⚠️" };
@@ -893,25 +946,19 @@ var AlertaSC = (() => {
         return "";
     }
   }
-  function buildAlertEmail(changes, result, dmcAlerts, { location, dashboardUrl }) {
-    var _a;
+  function buildBulletinEmail(pending, result, { location, dashboardUrl, label }) {
     const tz = location.timezone;
-    const ranked = [...changes].sort((a, b) => rank(b) - rank(a));
-    const top = ranked[0];
-    const h = (_a = result.hazards.find((x) => x.id === top.hazardId)) != null ? _a : { name: "Aviso DMC" };
-    let subject;
-    if (ranked.every((c) => c.type === "fin")) {
-      subject = `✅ Fin de alerta: ${ranked.map((c) => {
-        var _a2;
-        return (_a2 = result.hazards.find((x) => x.id === c.hazardId)) == null ? void 0 : _a2.name;
-      }).join(", ")} — ${location.name}`;
-    } else if (top.type === "baja" || top.type === "fin") {
-      subject = `↘️ ${h.name} baja a ${LEVELS[top.to].name} — ${location.name}`;
-    } else {
-      subject = `${LEVELS[top.to].emoji} ${LEVELS[top.to].name.toUpperCase()} · ${h.name} — ${location.name}`;
-    }
-    const lines = ranked.map((c) => describeChange(c, result, dmcAlerts, tz));
-    return render({ subject, intro: "Cambios detectados:", lines, result, location, dashboardUrl });
+    const o = result.overall;
+    const main = result.hazards.find((x) => x.id === o.hazardId);
+    const state = o.level ? `${LEVELS[o.level].name.toUpperCase()}: ${main ? main.name : o.headline}` : "Sin alertas";
+    return render({
+      subject: `${LEVELS[o.level].emoji} Boletín ${label} · ${state} — ${location.name}`,
+      intro: pending.length ? `Cambios desde el boletín anterior (${pending.length}):` : "Sin cambios de nivel desde el boletín anterior.",
+      lines: pending.map((p) => `${formatLocal(p.at, tz)} · ${p.text}`),
+      result,
+      location,
+      dashboardUrl
+    });
   }
   function buildTestEmail(result, { location, dashboardUrl }) {
     return render({
@@ -999,7 +1046,7 @@ Panel: ${dashboardUrl}` : ""
 
   // src/sources/aviation.js
   var API = "https://aviationweather.gov/api/data";
-  var KT_TO_KMH = 1.852;
+  var KT_TO_MS = 0.514444;
   var NAMES = { SCTB: "Tobalaba", SCEL: "Pudahuel (aeropuerto)", SCBQ: "El Bosque" };
   async function fetchMetars(ids, location) {
     const list2 = await fetchJson(`${API}/metar?ids=${ids.join(",")}&format=json&hours=3`);
@@ -1026,8 +1073,8 @@ Panel: ${dashboardUrl}` : ""
       time: m.obsTime * 1e3,
       raw,
       temp: (_d = m.temp) != null ? _d : null,
-      windKmh: wind ? round(Number(wind[2]) * KT_TO_KMH) : null,
-      gustKmh: (wind == null ? void 0 : wind[3]) ? round(Number(wind[3]) * KT_TO_KMH) : null,
+      windMs: wind ? round(Number(wind[2]) * KT_TO_MS, 1) : null,
+      gustMs: (wind == null ? void 0 : wind[3]) ? round(Number(wind[3]) * KT_TO_MS, 1) : null,
       thunder: has(/^[+-]?TS/),
       // tormenta en la estación
       thunderNear: has(/^VCTS/),
@@ -1055,7 +1102,7 @@ Panel: ${dashboardUrl}` : ""
         wx: (_c2 = f.wxString) != null ? _c2 : "",
         thunder: /(^|\s)[+-]?(VC)?TS/.test((_d = f.wxString) != null ? _d : ""),
         cb: ((_e = f.clouds) != null ? _e : []).some((c) => c.type === "CB"),
-        gustKmh: f.wgst ? round(f.wgst * KT_TO_KMH) : null
+        gustMs: f.wgst ? round(f.wgst * KT_TO_MS, 1) : null
       };
     });
     return {
@@ -1064,7 +1111,7 @@ Panel: ${dashboardUrl}` : ""
       issued: Date.parse(t.issueTime),
       validTo: t.validTimeTo * 1e3,
       raw: t.rawTAF,
-      periods: periods.filter((p) => p.thunder || p.cb || p.gustKmh)
+      periods: periods.filter((p) => p.thunder || p.cb || p.gustMs)
     };
   }
 
@@ -3498,25 +3545,28 @@ Panel: ${dashboardUrl}` : ""
     };
   }
   function parseMetNo(json) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m;
     const hours = /* @__PURE__ */ new Map();
     for (const entry of json.properties.timeseries) {
       const t = Date.parse(entry.time);
       const inst = (_b = (_a = entry.data.instant) == null ? void 0 : _a.details) != null ? _b : {};
       const base = {
         temp: (_c = inst.air_temperature) != null ? _c : null,
-        wind: inst.wind_speed != null ? inst.wind_speed * 3.6 : null,
-        gust: inst.wind_speed_of_gust != null ? inst.wind_speed_of_gust * 3.6 : null
+        wind: (_d = inst.wind_speed) != null ? _d : null,
+        // m/s
+        gust: (_e = inst.wind_speed_of_gust) != null ? _e : null,
+        uv: (_f = inst.ultraviolet_index_clear_sky) != null ? _f : null
+        // índice UV con cielo despejado
       };
       const n1 = entry.data.next_1_hours;
       const n6 = entry.data.next_6_hours;
       if (n1) {
-        if (!hours.has(t)) hours.set(t, { ...base, precip: (_e = (_d = n1.details) == null ? void 0 : _d.precipitation_amount) != null ? _e : null, symbol: (_g = (_f = n1.summary) == null ? void 0 : _f.symbol_code) != null ? _g : "" });
+        if (!hours.has(t)) hours.set(t, { ...base, precip: (_h = (_g = n1.details) == null ? void 0 : _g.precipitation_amount) != null ? _h : null, symbol: (_j = (_i = n1.summary) == null ? void 0 : _i.symbol_code) != null ? _j : "" });
       } else if (n6) {
-        const p = (_h = n6.details) == null ? void 0 : _h.precipitation_amount;
+        const p = (_k = n6.details) == null ? void 0 : _k.precipitation_amount;
         for (let k = 0; k < 6; k++) {
           const tk = t + k * HOUR;
-          if (!hours.has(tk)) hours.set(tk, { ...base, precip: p != null ? p / 6 : null, symbol: (_j = (_i = n6.summary) == null ? void 0 : _i.symbol_code) != null ? _j : "" });
+          if (!hours.has(tk)) hours.set(tk, { ...base, precip: p != null ? p / 6 : null, symbol: (_m = (_l = n6.summary) == null ? void 0 : _l.symbol_code) != null ? _m : "" });
         }
       }
     }
@@ -3536,7 +3586,8 @@ Panel: ${dashboardUrl}` : ""
       li: times.map(() => null),
       wind: col("wind"),
       gust: col("gust"),
-      snow: times.map(() => null)
+      snow: times.map(() => null),
+      uv: col("uv")
     };
   }
 
@@ -3549,7 +3600,9 @@ Panel: ${dashboardUrl}` : ""
     "lifted_index",
     "wind_speed_10m",
     "wind_gusts_10m",
-    "snowfall"
+    "snowfall",
+    "uv_index"
+    // solo GFS lo entrega por modelo
   ];
   async function fetchOpenMeteo(location, models, hours, { apiKey } = {}) {
     const params = {
@@ -3561,7 +3614,7 @@ Panel: ${dashboardUrl}` : ""
       past_hours: 0,
       timeformat: "unixtime",
       timezone: "GMT",
-      wind_speed_unit: "kmh"
+      wind_speed_unit: "ms"
     };
     if (apiKey) params.apikey = apiKey;
     const query = Object.entries(params).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&");
@@ -3592,19 +3645,24 @@ Panel: ${dashboardUrl}` : ""
         li: get("lifted_index"),
         wind: get("wind_speed_10m"),
         gust: get("wind_gusts_10m"),
-        snow: get("snowfall")
+        snow: get("snowfall"),
+        uv: get("uv_index")
       };
     }).filter((s) => s.precip.some((v) => v !== null));
   }
 
   // src/check.js
-  var { LOCATION: LOCATION2, MODELS: MODELS2, DMC: DMC2, GLM: GLM2, STATIONS: STATIONS2, HORIZON_HOURS: HORIZON_HOURS2, OPEN_METEO_CACHE_MINUTES: OPEN_METEO_CACHE_MINUTES2, NOTIFY: NOTIFY2 } = config_exports;
+  var { LOCATION: LOCATION2, MODELS: MODELS2, DMC: DMC2, GLM: GLM2, STATIONS: STATIONS2, HORIZON_HOURS: HORIZON_HOURS2, OPEN_METEO_CACHE_MINUTES: OPEN_METEO_CACHE_MINUTES2, NOTIFY: NOTIFY2, CACHE_VERSION: CACHE_VERSION2 } = config_exports;
   var STALE_LIMIT = 6 * HOUR;
-  var MAX_EMAIL_RETRIES = 6;
   async function runCheck({ kv: kv2, mailer: mailer2, settings: settings2 = {}, now = Date.now() }) {
     const state = await kv2.get("state") || {};
+    if (state.cacheVersion !== CACHE_VERSION2) {
+      state.cache = {};
+      state.cacheVersion = CACHE_VERSION2;
+    }
     state.cache = state.cache || {};
     state.history = state.history || [];
+    state.pending = state.pending || [];
     const sources = [];
     let newFrame = null;
     async function track(id, name, url, loader) {
@@ -3685,28 +3743,35 @@ Panel: ${dashboardUrl}` : ""
     const { changes, notified, dmcSeen } = diffAlerts(state, result, dmcAlerts, now, NOTIFY2, degraded);
     state.notified = notified;
     state.dmcSeen = dmcSeen;
-    if (changes.length) {
-      const email = buildAlertEmail(changes, result, dmcAlerts, { location: LOCATION2, dashboardUrl: settings2.dashboardUrl });
+    for (const c of changes) {
+      const entry = {
+        at: now,
+        type: c.type,
+        hazardId: c.hazardId,
+        from: c.from == null ? null : c.from,
+        to: c.to || 0,
+        text: describeChange(c, result, dmcAlerts, LOCATION2.timezone),
+        emailed: false
+      };
+      state.history.push(entry);
+      state.pending.push({ at: entry.at, text: entry.text, to: entry.to });
+    }
+    state.history = state.history.slice(-NOTIFY2.historySize);
+    state.pending = state.pending.slice(-50);
+    delete state.retryEmail;
+    const slot = dueBulletin(now, state.lastBulletin, NOTIFY2, LOCATION2.timezone);
+    if (slot) {
+      const email = buildBulletinEmail(state.pending, result, { location: LOCATION2, dashboardUrl: settings2.dashboardUrl, label: slot.label });
       const sent = await sendSafely(mailer2, email);
       state.lastEmail = { at: now, subject: email.subject, ok: sent.ok, skipped: !!sent.skipped, error: sent.error || null };
-      state.retryEmail = sent.ok || sent.skipped ? null : { ...email, attempts: 1 };
-      for (const c of changes) {
-        state.history.push({
-          at: now,
-          type: c.type,
-          hazardId: c.hazardId,
-          from: c.from == null ? null : c.from,
-          to: c.to || 0,
-          text: describeChange(c, result, dmcAlerts, LOCATION2.timezone),
-          emailed: sent.ok
-        });
+      if (sent.ok || sent.skipped) {
+        const sentAt = new Set(state.pending.map((p) => p.at));
+        if (sent.ok) {
+          for (const h of state.history) if (sentAt.has(h.at)) h.emailed = true;
+        }
+        state.pending = [];
+        state.lastBulletin = slot.key;
       }
-      state.history = state.history.slice(-NOTIFY2.historySize);
-    } else if (state.retryEmail && state.retryEmail.attempts < MAX_EMAIL_RETRIES) {
-      const { attempts, ...email } = state.retryEmail;
-      const sent = await sendSafely(mailer2, email);
-      state.lastEmail = { at: now, subject: email.subject, ok: sent.ok, skipped: !!sent.skipped, error: sent.error || null, retry: attempts };
-      state.retryEmail = sent.ok || sent.skipped ? null : { ...email, attempts: attempts + 1 };
     }
     if (newFrame) {
       const frames = (await kv2.get("glm-frames") || []).filter((f) => f.time !== newFrame.time);
@@ -3737,7 +3802,14 @@ Panel: ${dashboardUrl}` : ""
       degraded,
       changes: changes.length,
       history: [...state.history].reverse().slice(0, 50),
-      email: { configured: !!mailer2.configured, paused: !!mailer2.paused, last: state.lastEmail || null }
+      email: {
+        configured: !!mailer2.configured,
+        paused: !!mailer2.paused,
+        last: state.lastEmail || null,
+        schedule: NOTIFY2.bulletinHours.map((h) => `${String(h).padStart(2, "0")}:00`),
+        next: nextBulletin(now, NOTIFY2, LOCATION2.timezone),
+        pending: state.pending.length
+      }
     };
     await kv2.put("state", state);
     await kv2.put("status", status);
@@ -3901,7 +3973,7 @@ Panel: ${dashboardUrl}` : ""
     }
     ScriptApp.newTrigger("revisar").timeBased().everyMinutes(10).create();
     console.log("Activador creado: revisar() se ejecutará cada 10 minutos.");
-    console.log(`Los correos se enviarán a: ${recipients().join(", ") || "(nadie)"}`);
+    console.log(`Boletines a las 7:00, 13:00 y 18:00 para: ${recipients().join(", ") || "(nadie)"}${mailer.paused ? " (en pausa)" : ""}`);
     await revisar();
   }
   function desinstalar() {
@@ -3920,7 +3992,7 @@ Panel: ${dashboardUrl}` : ""
   }
   function reanudarCorreos() {
     PropertiesService.getScriptProperties().deleteProperty("CORREOS_PAUSADOS");
-    console.log(`Correos reactivados. Se enviarán a: ${recipients().join(", ")}`);
+    console.log(`Correos reactivados. El próximo boletín (7:00, 13:00 o 18:00) se enviará a: ${recipients().join(", ")}`);
   }
   async function probarCorreo() {
     const status = kv().get("status") || await revisar();

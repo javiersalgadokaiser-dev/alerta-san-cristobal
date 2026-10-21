@@ -14,88 +14,116 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <img src="icons/icon.svg" alt="" width="36" height="36">
-      <div>
-        <h1>Alerta temprana</h1>
-        <p>Cerro San Cristóbal · Santiago</p>
+  <header class="appbar">
+    <div class="topbar">
+      <div class="brand">
+        <img src="icons/icon.svg" alt="" width="36" height="36">
+        <div>
+          <h1>Alerta temprana</h1>
+          <p>Cerro San Cristóbal · Santiago</p>
+        </div>
+      </div>
+      <button id="overall" class="overall" type="button" hidden title="Ver todos los peligros"></button>
+      <div class="top-actions">
+        <span id="updated" class="muted" aria-live="polite"></span>
+        <button id="refresh" class="btn-icon" type="button" aria-label="Actualizar" title="Actualizar">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button id="open-settings" class="btn-icon" type="button" aria-label="Ajustes" title="Ajustes">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></g></svg>
+        </button>
+        <button id="install" class="btn" type="button" hidden>Instalar app</button>
       </div>
     </div>
-    <div class="top-actions">
-      <span id="updated" class="muted" aria-live="polite"></span>
-      <button id="refresh" class="btn-icon" type="button" aria-label="Actualizar" title="Actualizar">
-        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
-      <button id="open-settings" class="btn-icon" type="button" aria-label="Ajustes" title="Ajustes">
-        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></g></svg>
-      </button>
-      <button id="install" class="btn" type="button" hidden>Instalar app</button>
-    </div>
+    <nav class="tabbar" role="tablist" aria-label="Secciones del panel">
+      <button type="button" role="tab" id="tab-resumen" data-tab="resumen" aria-controls="panel-resumen">Resumen</button>
+      <button type="button" role="tab" id="tab-peligros" data-tab="peligros" aria-controls="panel-peligros">Peligros</button>
+      <button type="button" role="tab" id="tab-pronostico" data-tab="pronostico" aria-controls="panel-pronostico">Próximas 72 horas</button>
+      <button type="button" role="tab" id="tab-comparacion" data-tab="comparacion" aria-controls="panel-comparacion">Comparación y DMC</button>
+      <button type="button" role="tab" id="tab-mapa" data-tab="mapa" aria-controls="panel-mapa">Mapa Meteored</button>
+      <button type="button" role="tab" id="tab-historial" data-tab="historial" aria-controls="panel-historial">Historial y fuentes</button>
+    </nav>
   </header>
 
   <div id="banner" class="banner" hidden></div>
 
   <main id="app" aria-busy="true">
-    <section id="early" class="early" aria-labelledby="h-early" hidden></section>
-
-    <section id="hero" class="hero lvl-0">
-      <div class="hero-text"><p class="muted">Cargando…</p></div>
-    </section>
-
-    <section aria-labelledby="h-hazards">
-      <h2 id="h-hazards">Peligros</h2>
-      <div id="hazards" class="hazard-grid"></div>
-    </section>
-
-    <section aria-labelledby="h-rayos">
-      <h2 id="h-rayos">Rayos por satélite</h2>
-      <p class="section-sub">Rayos de la última hora detectados por el satélite GOES-19 (sensor GLM). La DMC publica una imagen cada 10 minutos, con unos 40 minutos de retraso.</p>
-      <div id="rayos" class="rayos"></div>
-    </section>
-
-    <section aria-labelledby="h-charts">
-      <h2 id="h-charts">Próximas 72 horas</h2>
-      <p id="charts-sub" class="section-sub"></p>
-      <div class="chart-card" id="chart-thunder"></div>
-      <div class="chart-card" id="chart-rain"></div>
-      <div class="chart-card" id="chart-gust"></div>
-    </section>
-
-    <div class="two-col">
-      <section aria-labelledby="h-dmc">
-        <h2 id="h-dmc">Avisos oficiales DMC</h2>
-        <div id="dmc"></div>
+    <!-- 1. Resumen: tormenta eléctrica, alerta temprana, rayos y lo observado ahora -->
+    <div class="tab-panel" id="panel-resumen" role="tabpanel" aria-labelledby="tab-resumen" data-panel="resumen">
+      <section id="storm" class="hero lvl-0" aria-label="Tormenta eléctrica">
+        <div class="hero-text"><p class="muted">Cargando…</p></div>
       </section>
+
+      <section id="early" class="early" aria-labelledby="h-early" hidden></section>
+
+      <section aria-labelledby="h-rayos">
+        <h2 id="h-rayos">Rayos por satélite</h2>
+        <p class="section-sub">Rayos de la última hora detectados por el satélite GOES-19 (sensor GLM). La DMC publica una imagen cada 10 minutos, con unos 40 minutos de retraso.</p>
+        <div id="rayos" class="rayos"></div>
+      </section>
+
       <section aria-labelledby="h-obs">
         <h2 id="h-obs">Observado ahora</h2>
         <div id="obs"></div>
       </section>
     </div>
 
-    <section aria-labelledby="h-meteored">
-      <h2 id="h-meteored">Mapa de avisos · Meteored</h2>
-      <p class="section-sub">Mapa interactivo de Meteored con los avisos meteorológicos de todo Chile (los publica la DMC).</p>
-      <div id="meteored" class="meteored"></div>
-    </section>
-
-    <section aria-labelledby="h-compare">
-      <h2 id="h-compare">Comparación de fuentes</h2>
-      <p class="section-sub">Qué pronostica cada fuente para las próximas 72 horas. Toca una fuente en la leyenda para destacarla.</p>
-      <div id="compare" class="chart-card compare"></div>
-      <h3 class="table-title">Máximos de cada fuente en 72 horas</h3>
-      <div id="models" class="table-scroll"></div>
-    </section>
-
-    <div class="two-col">
-      <section aria-labelledby="h-history">
-        <h2 id="h-history">Historial de alertas</h2>
-        <div id="history"></div>
+    <!-- 2. Peligros -->
+    <div class="tab-panel" id="panel-peligros" role="tabpanel" aria-labelledby="tab-peligros" data-panel="peligros" hidden>
+      <section id="hero" class="hero lvl-0" aria-label="Estado general"></section>
+      <section aria-labelledby="h-hazards">
+        <h2 id="h-hazards">Peligros</h2>
+        <div id="hazards" class="hazard-grid"></div>
       </section>
-      <section aria-labelledby="h-sources">
-        <h2 id="h-sources">Estado de las fuentes</h2>
-        <div id="sources"></div>
+    </div>
+
+    <!-- 3. Próximas 72 horas -->
+    <div class="tab-panel" id="panel-pronostico" role="tabpanel" aria-labelledby="tab-pronostico" data-panel="pronostico" hidden>
+      <section aria-labelledby="h-charts">
+        <h2 id="h-charts">Próximas 72 horas</h2>
+        <p id="charts-sub" class="section-sub"></p>
+        <div class="chart-card" id="chart-thunder"></div>
+        <div class="chart-card" id="chart-rain"></div>
+        <div class="chart-card" id="chart-gust"></div>
       </section>
+    </div>
+
+    <!-- 4. Comparación de fuentes y avisos oficiales DMC -->
+    <div class="tab-panel" id="panel-comparacion" role="tabpanel" aria-labelledby="tab-comparacion" data-panel="comparacion" hidden>
+      <section aria-labelledby="h-compare">
+        <h2 id="h-compare">Comparación de fuentes</h2>
+        <p class="section-sub">Qué pronostica cada fuente para las próximas 72 horas. Toca una fuente en la leyenda para destacarla.</p>
+        <div id="compare" class="chart-card compare"></div>
+        <h3 class="table-title">Máximos de cada fuente en 72 horas</h3>
+        <div id="models" class="table-scroll"></div>
+      </section>
+      <section aria-labelledby="h-dmc">
+        <h2 id="h-dmc">Avisos oficiales DMC</h2>
+        <div id="dmc"></div>
+      </section>
+    </div>
+
+    <!-- 5. Mapa de Meteored -->
+    <div class="tab-panel" id="panel-mapa" role="tabpanel" aria-labelledby="tab-mapa" data-panel="mapa" hidden>
+      <section aria-labelledby="h-meteored">
+        <h2 id="h-meteored">Mapa de avisos · Meteored</h2>
+        <p class="section-sub">Mapa interactivo de Meteored con los avisos meteorológicos de todo Chile (los publica la DMC).</p>
+        <div id="meteored" class="meteored"></div>
+      </section>
+    </div>
+
+    <!-- 6. Historial de alertas y estado de las fuentes -->
+    <div class="tab-panel" id="panel-historial" role="tabpanel" aria-labelledby="tab-historial" data-panel="historial" hidden>
+      <div class="two-col">
+        <section aria-labelledby="h-history">
+          <h2 id="h-history">Historial de alertas</h2>
+          <div id="history"></div>
+        </section>
+        <section aria-labelledby="h-sources">
+          <h2 id="h-sources">Estado de las fuentes</h2>
+          <div id="sources"></div>
+        </section>
+      </div>
     </div>
   </main>
 

@@ -10,6 +10,7 @@ const VARIABLES = [
   'wind_speed_10m',
   'wind_gusts_10m',
   'snowfall',
+  'uv_index', // solo GFS lo entrega por modelo
 ];
 
 /**
@@ -26,7 +27,7 @@ export async function fetchOpenMeteo(location, models, hours, { apiKey } = {}) {
     past_hours: 0,
     timeformat: 'unixtime',
     timezone: 'GMT',
-    wind_speed_unit: 'kmh',
+    wind_speed_unit: 'ms',
   };
   if (apiKey) params.apikey = apiKey;
   const query = Object.entries(params)
@@ -38,7 +39,7 @@ export async function fetchOpenMeteo(location, models, hours, { apiKey } = {}) {
   return parseOpenMeteo(json, models);
 }
 
-/** Una serie horaria por modelo, con unidades km/h, mm, cm, °C y J/kg. */
+/** Una serie horaria por modelo, con unidades m/s, mm, cm, °C, J/kg e índice UV. */
 export function parseOpenMeteo(json, models) {
   const times = json.hourly.time.map((t) => t * 1000);
   return models
@@ -60,6 +61,7 @@ export function parseOpenMeteo(json, models) {
         wind: get('wind_speed_10m'),
         gust: get('wind_gusts_10m'),
         snow: get('snowfall'),
+        uv: get('uv_index'),
       };
     })
     .filter((s) => s.precip.some((v) => v !== null));

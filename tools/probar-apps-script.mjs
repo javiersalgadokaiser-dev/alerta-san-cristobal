@@ -166,6 +166,11 @@ const context = vm.createContext({
   Logger: { log },
   console: { log, error: (...a) => log('ERROR', ...a), warn: log },
 });
+// AHORA=2026-10-21T13:05-03:00 simula esa hora (p. ej. para probar el boletín de las 13:00)
+if (process.env.AHORA) {
+  const offset = Date.parse(process.env.AHORA) - Date.now();
+  vm.runInContext(`{ const realNow = Date.now; Date.now = () => realNow() + ${offset}; }`, context);
+}
 vm.runInContext(code, context, { filename: 'Codigo.gs' });
 const run = (expr) => vm.runInContext(expr, context);
 

@@ -30,8 +30,9 @@ export function parseMetNo(json) {
     const inst = entry.data.instant?.details ?? {};
     const base = {
       temp: inst.air_temperature ?? null,
-      wind: inst.wind_speed != null ? inst.wind_speed * 3.6 : null,
-      gust: inst.wind_speed_of_gust != null ? inst.wind_speed_of_gust * 3.6 : null,
+      wind: inst.wind_speed ?? null, // m/s
+      gust: inst.wind_speed_of_gust ?? null,
+      uv: inst.ultraviolet_index_clear_sky ?? null, // índice UV con cielo despejado
     };
     const n1 = entry.data.next_1_hours;
     const n6 = entry.data.next_6_hours;
@@ -62,5 +63,6 @@ export function parseMetNo(json) {
     wind: col('wind'),
     gust: col('gust'),
     snow: times.map(() => null),
+    uv: col('uv'),
   };
 }

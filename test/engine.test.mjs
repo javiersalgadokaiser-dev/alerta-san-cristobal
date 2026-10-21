@@ -20,9 +20,9 @@ function metar(raw, icao = 'SCTB', minutesAgo = 10) {
 /** Modelo sintético: `fn(h)` devuelve los valores de la hora h. */
 function model(id, fn) {
   const times = Array.from({ length: 74 }, (_, i) => Math.floor(NOW / HOUR) * HOUR + i * HOUR);
-  const rows = times.map((_, h) => ({ temp: 15, precip: 0, thunder: false, cape: 0, gust: 20, wind: 10, snow: 0, ...fn(h) }));
+  const rows = times.map((_, h) => ({ temp: 15, precip: 0, thunder: false, cape: 0, gust: 5, wind: 3, snow: 0, uv: null, ...fn(h) }));
   const col = (k) => rows.map((r) => r[k]);
-  return { id, name: id, times, temp: col('temp'), precip: col('precip'), thunder: col('thunder'), cape: col('cape'), gust: col('gust'), wind: col('wind'), snow: col('snow') };
+  return { id, name: id, times, temp: col('temp'), precip: col('precip'), thunder: col('thunder'), cape: col('cape'), gust: col('gust'), wind: col('wind'), snow: col('snow'), uv: col('uv') };
 }
 const calm = (n) => Array.from({ length: n }, (_, i) => model(`m${i}`, () => ({})));
 const level = (result, id) => result.hazards.find((h) => h.id === id).level;
@@ -32,7 +32,7 @@ test('METAR: tormenta, cumulonimbus, ráfagas y lluvia intensa', () => {
   assert.equal(m.thunder, true);
   assert.equal(m.cb, true);
   assert.equal(m.heavyRain, true);
-  assert.equal(m.gustKmh, 56);
+  assert.equal(m.gustMs, 15.4); // 30 nudos
   assert.equal(m.distKm, 8);
 });
 
@@ -69,11 +69,14 @@ test('Lluvia: niveles según la mediana de 24 h', () => {
   assert.equal(level(evaluate({ now: NOW, forecasts: rain(2.5), cfg }), 'lluvia'), 3); // 60 mm
 });
 
-test('Viento: un modelo extremo no basta, cuenta la mediana', () => {
-  const f = [...calm(4), model('x', () => ({ gust: 95 }))];
+test('Viento (m/s): un modelo extremo no basta, cuenta la mediana; Alerta desde 15 m/s', () => {
+  const f = [...calm(4), model('x', () => ({ gust: 26 }))];
   assert.equal(level(evaluate({ now: NOW, forecasts: f, cfg }), 'viento'), 0);
-  const g = Array.from({ length: 5 }, (_, i) => model(`g${i}`, () => ({ gust: 72 })));
-  assert.equal(level(evaluate({ now: NOW, forecasts: g, cfg }), 'viento'), 2);
+  const g = (v) => Array.from({ length: 5 }, (_, i) => model(`g${i}`, () => ({ gust: v })));
+  assert.equal(level(evaluate({ now: NOW, forecasts: g(11), cfg }), 'viento'), 0);
+  assert.equal(level(evaluate({ now: NOW, forecasts: g(12.5), cfg }), 'viento'), 1);
+  assert.equal(level(evaluate({ now: NOW, forecasts: g(15), cfg }), 'viento'), 2);
+  assert.equal(level(evaluate({ now: NOW, forecasts: g(21), cfg }), 'viento'), 3);
 });
 
 test('TAF con tormenta probable (PROB30) es Aviso', () => {
@@ -239,4 +242,32 @@ test('Alerta temprana: inicio de la lluvia y total esperado', () => {
 
 test('Alerta temprana: sin señales no hay avisos', () => {
   assert.deepEqual(upcoming({ forecasts: calm(6) }), []);
+});
+
+// --- Boletín de correo a las 7:00, 13:00 y 18:00 (hora de Santiago) ---------------
+
+test('Boletín: solo a las 7:00, 13:00 y 18:00, una vez por horario', async () => {
+  const { dueBulletin, nextBulletin } = await import('../src/notify.js');
+  const at = (h, m) => Date.UTC(2026, 9, 21, h + 3, m); // octubre: Santiago = UTC-3
+  assert.equal(dueBulletin(at(6, 55), null, cfg.NOTIFY, tz), null);
+  assert.deepEqual(dueBulletin(at(7, 4), null, cfg.NOTIFY, tz), { key: '2026-10-21 07:00', label: '07:00' });
+  assert.equal(dueBulletin(at(7, 14), '2026-10-21 07:00', cfg.NOTIFY, tz), null); // ya enviado
+  assert.equal(dueBulletin(at(8, 30), null, cfg.NOTIFY, tz), null); // fuera de la ventana de 60 min
+  assert.equal(dueBulletin(at(13, 9), '2026-10-21 07:00', cfg.NOTIFY, tz).label, '13:00');
+  assert.equal(dueBulletin(at(18, 0), '2026-10-21 13:00', cfg.NOTIFY, tz).label, '18:00');
+  assert.equal(dueBulletin(at(19, 10), null, cfg.NOTIFY, tz), null);
+  assert.equal(nextBulletin(at(13, 30), cfg.NOTIFY, tz), at(18, 0));
+  assert.equal(nextBulletin(at(19, 0), cfg.NOTIFY, tz), Date.UTC(2026, 9, 22, 10, 0)); // mañana 7:00
+});
+
+// --- Radiación UV -----------------------------------------------------------------
+
+test('UV: Aviso desde 8 (muy alto), Alerta desde 11 (extremo), nunca Alarma', () => {
+  const uv = (v) => [...calm(5), model('GFS', (h) => ({ uv: h === 20 ? v : 0 }))];
+  assert.equal(level(evaluate({ now: NOW, forecasts: uv(7), cfg }), 'uv'), 0);
+  assert.equal(level(evaluate({ now: NOW, forecasts: uv(9), cfg }), 'uv'), 1);
+  assert.equal(level(evaluate({ now: NOW, forecasts: uv(12), cfg }), 'uv'), 2);
+  assert.equal(level(evaluate({ now: NOW, forecasts: uv(15), cfg }), 'uv'), 2);
+  const hz = evaluate({ now: NOW, forecasts: uv(12), cfg }).hazards.find((h) => h.id === 'uv');
+  assert.match(hz.headline, /Índice UV de hasta 12 \(extremo\) según GFS 12/);
 });

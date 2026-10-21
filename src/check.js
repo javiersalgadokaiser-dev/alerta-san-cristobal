@@ -1,6 +1,6 @@
 import * as cfg from './config.js';
 import { HAZARDS, evaluate } from './engine.js';
-import { buildAlertEmail, describeChange, diffAlerts } from './notify.js';
+import { buildBulletinEmail, describeChange, diffAlerts, dueBulletin, nextBulletin } from './notify.js';
 import { fetchMetars, fetchTafs } from './sources/aviation.js';
 import { activeAlerts, dmcSignature, fetchDmc, parseDmc } from './sources/dmc.js';
 import { loadGlm } from './sources/glm.js';
@@ -8,13 +8,13 @@ import { fetchMetNo } from './sources/metno.js';
 import { fetchOpenMeteo } from './sources/openmeteo.js';
 import { HOUR } from './util.js';
 
-const { LOCATION, MODELS, DMC, GLM, STATIONS, HORIZON_HOURS, OPEN_METEO_CACHE_MINUTES, NOTIFY } = cfg;
+const { LOCATION, MODELS, DMC, GLM, STATIONS, HORIZON_HOURS, OPEN_METEO_CACHE_MINUTES, NOTIFY, CACHE_VERSION } = cfg;
 const STALE_LIMIT = 6 * HOUR; // datos guardados que se aceptan si una fuente falla
-const MAX_EMAIL_RETRIES = 6;
 
 /**
- * Una revisión completa: consulta las fuentes, evalúa los peligros, envía el
- * correo si algo cambió y guarda el estado para el panel.
+ * Una revisión completa: consulta las fuentes, evalúa los peligros, registra los
+ * cambios, envía el boletín si es la hora (7:00, 13:00 y 18:00) y guarda el estado
+ * para el panel.
  *
  * No depende de la plataforma; recibe:
  *   kv:       { get(clave) → objeto | null, put(clave, objeto) }
@@ -23,8 +23,14 @@ const MAX_EMAIL_RETRIES = 6;
  */
 export async function runCheck({ kv, mailer, settings = {}, now = Date.now() }) {
   const state = (await kv.get('state')) || {};
+  // Datos guardados con otro formato o unidades (p. ej. viento en km/h): se descartan
+  if (state.cacheVersion !== CACHE_VERSION) {
+    state.cache = {};
+    state.cacheVersion = CACHE_VERSION;
+  }
   state.cache = state.cache || {};
   state.history = state.history || [];
+  state.pending = state.pending || [];
   const sources = [];
   let newFrame = null;
 
@@ -119,29 +125,38 @@ export async function runCheck({ kv, mailer, settings = {}, now = Date.now() }) 
   state.notified = notified;
   state.dmcSeen = dmcSeen;
 
-  if (changes.length) {
-    const email = buildAlertEmail(changes, result, dmcAlerts, { location: LOCATION, dashboardUrl: settings.dashboardUrl });
+  // Los cambios quedan en el historial y esperan el próximo boletín.
+  for (const c of changes) {
+    const entry = {
+      at: now,
+      type: c.type,
+      hazardId: c.hazardId,
+      from: c.from == null ? null : c.from,
+      to: c.to || 0,
+      text: describeChange(c, result, dmcAlerts, LOCATION.timezone),
+      emailed: false,
+    };
+    state.history.push(entry);
+    state.pending.push({ at: entry.at, text: entry.text, to: entry.to });
+  }
+  state.history = state.history.slice(-NOTIFY.historySize);
+  state.pending = state.pending.slice(-50);
+  delete state.retryEmail; // de la versión con correos inmediatos
+
+  // Boletín a las 7:00, 13:00 y 18:00. Si el envío falla, se reintenta en las
+  // revisiones siguientes mientras dure la ventana (60 min).
+  const slot = dueBulletin(now, state.lastBulletin, NOTIFY, LOCATION.timezone);
+  if (slot) {
+    const email = buildBulletinEmail(state.pending, result, { location: LOCATION, dashboardUrl: settings.dashboardUrl, label: slot.label });
     const sent = await sendSafely(mailer, email);
     state.lastEmail = { at: now, subject: email.subject, ok: sent.ok, skipped: !!sent.skipped, error: sent.error || null };
-    // Si el envío falla, el correo se reintenta en las próximas revisiones.
-    state.retryEmail = sent.ok || sent.skipped ? null : { ...email, attempts: 1 };
-    for (const c of changes) {
-      state.history.push({
-        at: now,
-        type: c.type,
-        hazardId: c.hazardId,
-        from: c.from == null ? null : c.from,
-        to: c.to || 0,
-        text: describeChange(c, result, dmcAlerts, LOCATION.timezone),
-        emailed: sent.ok,
-      });
+    if (sent.ok || sent.skipped) {
+      // En pausa también se da por cerrado: al reanudar solo se informa lo nuevo.
+      const sentAt = new Set(state.pending.map((p) => p.at));
+      if (sent.ok) for (const h of state.history) if (sentAt.has(h.at)) h.emailed = true;
+      state.pending = [];
+      state.lastBulletin = slot.key;
     }
-    state.history = state.history.slice(-NOTIFY.historySize);
-  } else if (state.retryEmail && state.retryEmail.attempts < MAX_EMAIL_RETRIES) {
-    const { attempts, ...email } = state.retryEmail;
-    const sent = await sendSafely(mailer, email);
-    state.lastEmail = { at: now, subject: email.subject, ok: sent.ok, skipped: !!sent.skipped, error: sent.error || null, retry: attempts };
-    state.retryEmail = sent.ok || sent.skipped ? null : { ...email, attempts: attempts + 1 };
   }
 
   if (newFrame) {
@@ -174,7 +189,14 @@ export async function runCheck({ kv, mailer, settings = {}, now = Date.now() }) 
     degraded,
     changes: changes.length,
     history: [...state.history].reverse().slice(0, 50),
-    email: { configured: !!mailer.configured, paused: !!mailer.paused, last: state.lastEmail || null },
+    email: {
+      configured: !!mailer.configured,
+      paused: !!mailer.paused,
+      last: state.lastEmail || null,
+      schedule: NOTIFY.bulletinHours.map((h) => `${String(h).padStart(2, '0')}:00`),
+      next: nextBulletin(now, NOTIFY, LOCATION.timezone),
+      pending: state.pending.length,
+    },
   };
 
   await kv.put('state', state);

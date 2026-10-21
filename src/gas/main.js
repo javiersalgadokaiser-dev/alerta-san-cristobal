@@ -147,7 +147,7 @@ export async function instalar() {
   }
   ScriptApp.newTrigger('revisar').timeBased().everyMinutes(10).create();
   console.log('Activador creado: revisar() se ejecutará cada 10 minutos.');
-  console.log(`Los correos se enviarán a: ${recipients().join(', ') || '(nadie)'}`);
+  console.log(`Boletines a las 7:00, 13:00 y 18:00 para: ${recipients().join(', ') || '(nadie)'}${mailer.paused ? ' (en pausa)' : ''}`);
   await revisar();
 }
 
@@ -169,10 +169,10 @@ export function pausarCorreos() {
   console.log('Correos en pausa. Las revisiones y la app siguen funcionando. Para reactivarlos, ejecuta reanudarCorreos().');
 }
 
-/** Vuelve a enviar correos. Solo avisa los cambios que ocurran desde ahora. */
+/** Vuelve a enviar los boletines de las 7:00, 13:00 y 18:00. */
 export function reanudarCorreos() {
   PropertiesService.getScriptProperties().deleteProperty('CORREOS_PAUSADOS');
-  console.log(`Correos reactivados. Se enviarán a: ${recipients().join(', ')}`);
+  console.log(`Correos reactivados. El próximo boletín (7:00, 13:00 o 18:00) se enviará a: ${recipients().join(', ')}`);
 }
 
 /** Envía un correo de prueba con el estado actual (aunque los correos estén en pausa). */

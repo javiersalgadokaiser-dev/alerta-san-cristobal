@@ -14,10 +14,14 @@ export const HAZARDS = [
   { id: 'nieve', name: 'Nieve', emoji: '❄️' },
   { id: 'calor', name: 'Calor extremo', emoji: '🌡️' },
   { id: 'helada', name: 'Helada', emoji: '🧊' },
+  { id: 'uv', name: 'Radiación UV', emoji: '☀️' },
   { id: 'otro', name: 'Otros avisos DMC', emoji: '⚠️' },
 ];
 
-const FIELDS = ['temp', 'precip', 'thunder', 'cape', 'gust', 'wind', 'snow'];
+const FIELDS = ['temp', 'precip', 'thunder', 'cape', 'gust', 'wind', 'snow', 'uv'];
+
+/** Categoría del índice UV según la OMS. */
+export const uvCategory = (v) => (v >= 11 ? 'extremo' : v >= 8 ? 'muy alto' : v >= 6 ? 'alto' : v >= 3 ? 'moderado' : 'bajo');
 
 function align(src, grid) {
   const index = new Map(src.times.map((t, i) => [t, i]));
@@ -59,7 +63,7 @@ export function evaluate({ now, forecasts = [], metars = [], tafs = [], dmcAlert
   const timeline = grid.map((t, h) => {
     const vals = (k) => fc.map((s) => s[k][h]).filter(isNum);
     const th = fc.map((s) => s.thunder[h]).filter((v) => v !== null);
-    const [pr, gu, ca, te] = [vals('precip'), vals('gust'), vals('cape'), vals('temp')];
+    const [pr, gu, ca, te, uv] = [vals('precip'), vals('gust'), vals('cape'), vals('temp'), vals('uv')];
     return {
       t,
       thunderK: th.filter(Boolean).length,
@@ -69,9 +73,10 @@ export function evaluate({ now, forecasts = [], metars = [], tafs = [], dmcAlert
       precipMed: round(median(pr), 1),
       precipMin: round(minOf(pr), 1),
       precipMax: round(maxOf(pr), 1),
-      gustMed: round(median(gu)),
-      gustMin: round(minOf(gu)),
-      gustMax: round(maxOf(gu)),
+      gustMed: round(median(gu), 1),
+      gustMin: round(minOf(gu), 1),
+      gustMax: round(maxOf(gu), 1),
+      uvMax: round(maxOf(uv), 1),
       tempMed: round(median(te), 1),
     };
   });
@@ -85,7 +90,8 @@ export function evaluate({ now, forecasts = [], metars = [], tafs = [], dmcAlert
     rain24: round(maxWindowSum(s.precip, 24).value, 1),
     rain1h: round(maxOf(s.precip), 1),
     rainTotal: round(sumOf(s.precip), 1),
-    gust: round(maxOf(s.gust)),
+    gust: round(maxOf(s.gust), 1),
+    uv: round(maxOf(s.uv), 1),
     thunderHours: s.thunder.filter(Boolean).length,
     cape: round(maxOf(s.cape)),
     tmax: round(maxOf(s.temp), 1),
@@ -147,8 +153,8 @@ export function evaluate({ now, forecasts = [], metars = [], tafs = [], dmcAlert
   }
 
   // --- Viento ------------------------------------------------------------------
-  const gust = round(consensus('gust'));
-  metric.viento = { value: isNum(gust) ? `${gust} km/h` : '–', label: 'ráfaga máx. (mediana)' };
+  const gust = round(consensus('gust'), 1);
+  metric.viento = { value: isNum(gust) ? `${gust} m/s` : '–', label: 'ráfaga máx. (mediana)' };
   if (isNum(gust)) {
     const [lo, hi] = range('gust');
     const level = levelAbove(gust, T.gust);
@@ -157,7 +163,7 @@ export function evaluate({ now, forecasts = [], metars = [], tafs = [], dmcAlert
       source: 'Modelos numéricos',
       kind: 'pronóstico',
       level,
-      text: `Ráfagas de hasta ${gust} km/h (entre ${lo} y ${hi} km/h según las fuentes)`,
+      text: `Ráfagas de hasta ${gust} m/s (entre ${lo} y ${hi} m/s según las fuentes)`,
       ...w,
     });
   }
@@ -188,6 +194,24 @@ export function evaluate({ now, forecasts = [], metars = [], tafs = [], dmcAlert
     add('helada', { source: 'Modelos numéricos', kind: 'pronóstico', level: levelBelow(tmin, T.frost), text: `Mínima de ${tmin} °C`, ...w });
   }
 
+  // --- Radiación UV: se usa la fuente más alta (MET Norway la da con cielo despejado) --
+  const uvMax = maxOf(perSource.map((p) => p.uv));
+  metric.uv = {
+    value: isNum(uvMax) ? `${round(uvMax)}` : '–',
+    label: isNum(uvMax) ? `índice máximo (${uvCategory(uvMax)})` : 'sin datos',
+  };
+  if (isNum(uvMax)) {
+    const who = perSource.filter((p) => isNum(p.uv)).map((p) => `${p.name} ${round(p.uv)}`);
+    const w = windowOf(timeline, (x) => x.uvMax >= Math.min(6, uvMax), (x) => x.uvMax);
+    add('uv', {
+      source: 'Modelos numéricos',
+      kind: 'pronóstico',
+      level: levelAbove(uvMax, T.uv),
+      text: `Índice UV de hasta ${round(uvMax)} (${uvCategory(uvMax)}) según ${who.join(' y ')}`,
+      ...w,
+    });
+  }
+
   // --- Observaciones METAR (lo que está pasando ahora) -------------------------
   const latest = new Map();
   for (const m of metars) {
@@ -205,7 +229,7 @@ export function evaluate({ now, forecasts = [], metars = [], tafs = [], dmcAlert
     if (m.thunderTrend) add('tormenta', { ...obs, level: 2, text: `${m.name} prevé tormenta en las próximas 2 horas` });
     if (m.cb && !m.thunder) add('tormenta', { ...obs, level: near ? 2 : 1, text: `Nubes cumulonimbus (de tormenta) sobre ${m.name}` });
     if (m.heavyRain) add('lluvia', { ...obs, level: 1, text: `Lluvia intensa observada en ${m.name}` });
-    if (m.gustKmh) add('viento', { ...obs, level: levelAbove(m.gustKmh, T.gust), text: `Ráfaga de ${m.gustKmh} km/h en ${m.name}` });
+    if (m.gustMs) add('viento', { ...obs, level: levelAbove(m.gustMs, T.gust), text: `Ráfaga de ${m.gustMs} m/s en ${m.name}` });
   }
 
   // --- Rayos detectados por satélite (GOES-19 GLM, imágenes de la DMC) ---------
@@ -234,7 +258,7 @@ export function evaluate({ now, forecasts = [], metars = [], tafs = [], dmcAlert
       const prob = p.probability ? ` (probabilidad ${p.probability}%)` : '';
       if (p.thunder) add('tormenta', { ...base, level: p.probability && p.probability <= 30 ? 1 : 2, text: `Pronóstico de tormenta en ${taf.name}${prob}` });
       else if (p.cb) add('tormenta', { ...base, level: 1, text: `Pronóstico de cumulonimbus en ${taf.name}${prob}` });
-      if (p.gustKmh) add('viento', { ...base, level: Math.min(2, levelAbove(p.gustKmh, T.gust)), text: `Ráfagas de ${p.gustKmh} km/h en ${taf.name}${prob}` });
+      if (p.gustMs) add('viento', { ...base, level: Math.min(2, levelAbove(p.gustMs, T.gust)), text: `Ráfagas de ${p.gustMs} m/s en ${taf.name}${prob}` });
     }
   }
 
@@ -289,7 +313,8 @@ export function evaluate({ now, forecasts = [], metars = [], tafs = [], dmcAlert
       name: s.name,
       origin: s.origin,
       precip: s.precip.map((v) => round(v, 1)),
-      gust: s.gust.map((v) => round(v)),
+      gust: s.gust.map((v) => round(v, 1)),
+      uv: s.uv.map((v) => round(v, 1)),
       temp: s.temp.map((v) => round(v, 1)),
       thunder: s.thunder.map((v) => (v === null ? null : v ? 1 : 0)),
     })),

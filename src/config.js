@@ -75,7 +75,11 @@ export const METEORED_URL = 'https://www.meteored.cl/avisos-meteorologicos/';
 export const THRESHOLDS = {
   rain24h: [10, 25, 50], // mm acumulados en 24 h (mediana entre modelos)
   rain1h: [4, 8, 15], // mm en una hora
-  gust: [50, 70, 90], // km/h, ráfaga máxima
+  // m/s, ráfaga máxima (lo que mide un anemómetro en un instante). Alerta a 15 m/s.
+  gust: [12, 15, 20],
+  // Índice UV (escala OMS: 6-7 alto, 8-10 muy alto, 11+ extremo). Llega a Alerta como
+  // máximo: es predecible y se maneja con protección, no detiene la operación.
+  uv: [8, 11, 99],
   snow24h: [0.5, 5, 15], // cm en 24 h
   heat: [33, 36, 39], // °C, temperatura máxima
   frost: [0, -2, -5], // °C, temperatura mínima (igual o menor)
@@ -93,8 +97,17 @@ export const THRESHOLDS = {
 export const OPEN_METEO_CACHE_MINUTES = 60;
 
 export const NOTIFY = {
-  // Horas que un peligro debe mantenerse en un nivel menor antes de avisar que
-  // bajó o terminó. Evita correos repetidos cuando un pronóstico oscila.
+  // Horas que un peligro debe mantenerse en un nivel menor antes de registrar que
+  // bajó o terminó. Evita avisos repetidos cuando un pronóstico oscila.
   downgradeAfterHours: 3,
   historySize: 100,
+  // Los correos se envían solo a estas horas (hora de Santiago), como un boletín con
+  // el estado actual, la alerta temprana y los cambios desde el boletín anterior.
+  bulletinHours: [7, 13, 18],
+  // Si a la hora exacta no se pudo enviar, se reintenta durante estos minutos.
+  bulletinWindowMinutes: 60,
 };
+
+// Sube este número si cambia el formato o las unidades de los datos guardados:
+// la próxima revisión descarta lo guardado y consulta todo de nuevo.
+export const CACHE_VERSION = 2;

@@ -17,6 +17,20 @@ Google Apps Script (cada 10 min)                       GitHub Pages
                     └─► estado guardado ─► doGet (JSON) ─────► panel / app
 ```
 
+## Pestañas del panel
+
+| Pestaña | Qué muestra |
+|---|---|
+| **Resumen** | Estado de la tormenta eléctrica, alerta temprana, rayos por satélite y lo observado ahora |
+| **Peligros** | Estado general y cada peligro (tormenta, lluvia, viento, nieve, calor, helada y radiación UV) |
+| **Próximas 72 horas** | Gráficos de tormenta, lluvia y ráfagas |
+| **Comparación y DMC** | Qué pronostica cada fuente y los avisos oficiales de la DMC |
+| **Mapa Meteored** | Mapa interactivo de avisos de todo Chile |
+| **Historial y fuentes** | Cambios registrados y estado de cada fuente y del correo |
+
+El estado general se ve siempre en la barra superior; al tocarlo se abre *Peligros*. Cada
+pestaña tiene su propia dirección (por ejemplo, `#comparacion`) para guardarla como favorito.
+
 ## Usarlo en el computador
 
 - **Doble clic en `Abrir app.cmd`**: abre el panel en su propia ventana, sin la barra del
@@ -104,22 +118,30 @@ dispare solo una alerta):
 |---|---|---|---|
 | Lluvia en 24 h | 10 mm | 25 mm | 50 mm |
 | Lluvia en 1 h | 4 mm | 8 mm | 15 mm |
-| Ráfagas | 50 km/h | 70 km/h | 90 km/h |
+| Ráfagas de viento | 12 m/s | **15 m/s** | 20 m/s |
 | Nieve en 24 h | 0,5 cm | 5 cm | 15 cm |
 | Temperatura máxima | 33 °C | 36 °C | 39 °C |
 | Temperatura mínima | 0 °C | −2 °C | −5 °C |
+| Índice UV (la fuente más alta) | 8 (muy alto) | 11 (extremo) | — |
+
+El viento se expresa en **m/s** y la alerta se basa en las ráfagas (lo que mide un anemómetro en
+un instante). El índice UV llega como máximo a Alerta: es predecible y se maneja con protección,
+no detiene la operación.
 
 Todos los umbrales, distancias y la ubicación se ajustan en [src/config.js](src/config.js).
 
 ### Cuándo llega un correo
 
-- **Sube un nivel** o **la DMC publica un aviso nuevo** para la zona: de inmediato.
-- **Baja o termina**: solo si el nivel menor se mantiene durante 3 horas, para no recibir
-  correos cada vez que un pronóstico oscila.
-- Si caen las fuentes de pronóstico, nunca se declara el fin de una alerta.
-- Si el envío falla, se reintenta en las revisiones siguientes (hasta 1 hora).
+El sistema revisa todo cada 10 minutos, pero envía correo **solo a las 7:00, 13:00 y 18:00**
+(hora de Santiago): un **boletín** con el estado actual, la alerta temprana y los cambios
+registrados desde el boletín anterior.
 
-Todos los cambios del mismo momento van en un solo correo.
+- Un cambio es que un peligro **suba de nivel**, que la **DMC publique un aviso nuevo** para la zona,
+  o que un nivel **baje o termine** (esto último solo si se mantiene durante 3 horas, para no
+  registrar cada oscilación de un pronóstico).
+- Si caen las fuentes de pronóstico, nunca se declara el fin de una alerta.
+- Si a la hora del boletín el envío falla, se reintenta en las revisiones siguientes durante 1 hora.
+- Los horarios se cambian en `NOTIFY.bulletinHours` de [src/config.js](src/config.js).
 
 Para **pausar los correos** sin detener las revisiones, ejecuta `pausarCorreos` en Apps Script; para
 reactivarlos, `reanudarCorreos`. Mientras están en pausa, los cambios quedan en el historial del panel.

@@ -171,6 +171,11 @@ function partsAt(ms, tz) {
   return { y: +p.year, mo: +p.month, d: +p.day, h: +p.hour, mi: +p.minute, s: +p.second };
 }
 
+/** Fecha y hora local de `tz` en el instante `ms`: { y, mo (1-12), d, h, mi, s }. */
+export function localParts(ms, tz) {
+  return partsAt(ms, tz);
+}
+
 /** Diferencia (ms) entre la hora local de `tz` y UTC en el instante `ms`. */
 export function tzOffsetMs(ms, tz) {
   const p = partsAt(ms, tz);

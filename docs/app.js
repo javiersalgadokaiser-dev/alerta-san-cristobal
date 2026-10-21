@@ -10,8 +10,8 @@ const KEYS = {
   status: 'alerta-sc-estado',
   levels: 'alerta-sc-niveles',
   notify: 'alerta-sc-notificaciones',
-  meteored: 'alerta-sc-meteored',
   compare: 'alerta-sc-comparar',
+  tab: 'alerta-sc-pestana',
 };
 // Color fijo por fuente (sigue a la fuente, nunca a su posición): --cat-1…7 en styles.css
 const SOURCE_ORDER = ['ecmwf_ifs', 'gfs_seamless', 'icon_seamless', 'gem_seamless', 'ukmo_seamless', 'meteofrance_seamless', 'metno'];
@@ -26,6 +26,7 @@ const GLM_LEGEND = [
 
 let tz = 'America/Santiago';
 let data = null;
+let currentTab = 'resumen';
 let charts = [];
 let frames = [];
 let framesFor = null;
@@ -95,6 +96,7 @@ const HAZARD_ICONS = {
   nieve: `<g ${STROKE}><path d="M12 2v20M3.5 7l17 10M20.5 7l-17 10"/><path d="M9.5 3.5 12 6l2.5-2.5M9.5 20.5 12 18l2.5 2.5"/></g>`,
   calor: `<g ${STROKE}><path d="M14 14.8V4.5a2 2 0 0 0-4 0v10.3a4 4 0 1 0 4 0z"/><path d="M12 9v7"/><path d="M18 4l2-1M18 8h2"/></g>`,
   helada: `<g ${STROKE}><path d="M14 14.8V4.5a2 2 0 0 0-4 0v10.3a4 4 0 1 0 4 0z"/><path d="M12 14v2"/><path d="M17 6h4"/></g>`,
+  uv: `<g ${STROKE}><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></g>`,
   otro: `<g ${STROKE}><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></g>`,
 };
 const icon = (id, size = 22) => svgIcon(HAZARD_ICONS[id] ?? HAZARD_ICONS.otro, size);
@@ -188,6 +190,51 @@ function renderEarly(d) {
         )
       : h('p', { class: 'early-none' }, 'No se anticipan tormentas, lluvia, viento fuerte ni temperaturas extremas en las próximas 72 horas.'),
   );
+}
+
+/** Resumen: estado de la tormenta eléctrica, la prioridad del sistema. */
+function renderStorm(d) {
+  const hz = d.hazards.find((x) => x.id === 'tormenta');
+  if (!hz) return;
+  const box = $('#storm');
+  const signals = hz.evidence.filter((e) => e.level > 0);
+  box.className = `hero storm lvl-${hz.level}`;
+  box.replaceChildren(
+    h('div', { class: 'hero-badge' }, levelIcon(hz.level, 44)),
+    h(
+      'div',
+      { class: 'hero-text' },
+      h('div', { class: 'hero-level' }, hz.level ? `${LEVELS[hz.level]} de tormenta eléctrica` : 'Sin aviso de tormenta eléctrica'),
+      h('div', { class: 'hero-title' }, 'Tormenta eléctrica'),
+      h('p', {}, hz.headline),
+      hz.level > 0 && hz.start ? h('p', { class: 'hero-when' }, fmtRange(hz.start, hz.end)) : null,
+      hz.metric ? h('p', { class: 'hero-metric' }, h('strong', {}, hz.metric.value), ` ${hz.metric.label}`) : null,
+      signals.length > 1
+        ? h(
+            'details',
+            { class: 'hero-signals' },
+            h('summary', {}, `Ver las ${signals.length} señales`),
+            h(
+              'ul',
+              { class: 'evidence' },
+              signals.map((e) =>
+                h('li', {}, levelMark(e.level), h('div', {}, e.text, h('span', { class: 'src' }, [KIND[e.kind] ?? e.kind, evidenceWhen(e), e.source].filter(Boolean).join(' · ')))),
+              ),
+            ),
+          )
+        : null,
+    ),
+  );
+}
+
+/** Estado general en la barra superior (visible en todas las pestañas). */
+function renderOverall(d) {
+  const o = d.overall;
+  const main = d.hazards.find((x) => x.id === o.hazardId);
+  const b = $('#overall');
+  b.hidden = false;
+  b.className = `overall chip lvl-${o.level}`;
+  b.replaceChildren(levelIcon(o.level), h('span', { class: 'overall-text' }, o.level && main ? `${LEVELS[o.level]} · ${main.name}` : 'Sin alertas'));
 }
 
 function renderHero(d) {
@@ -291,12 +338,28 @@ function renderRayos(d) {
   const play = h('button', { id: 'rayos-play', class: 'btn btn-ghost', type: 'button' }, 'Animar última hora');
   const slider = h('input', { id: 'rayos-slider', type: 'range', min: '0', max: '0', value: '0', 'aria-label': 'Imagen' });
 
-  const clusters = g.clusters.length
+  // Núcleos a la misma distancia y dirección se muestran en una sola línea
+  const groups = [];
+  for (const c of g.clusters) {
+    const same = groups.find((x) => Math.abs(x.distKm - c.distKm) <= 2 && x.direction === c.direction);
+    if (same) {
+      same.n++;
+      same.ageClass = Math.min(same.ageClass, c.ageClass);
+    } else groups.push({ ...c, n: 1 });
+  }
+  const clusters = groups.length
     ? h(
         'ul',
         { class: 'rayos-list' },
-        g.clusters.map((c) =>
-          h('li', {}, h('i', { class: 'swatch', style: `background:${GLM_LEGEND[c.ageClass][0]}` }), h('strong', {}, `${c.distKm} km`), ` al ${c.direction}`, h('span', { class: 'muted' }, ` · ${GLM_LEGEND[c.ageClass][1]} antes de la imagen`)),
+        groups.map((c) =>
+          h(
+            'li',
+            {},
+            h('i', { class: 'swatch', style: `background:${GLM_LEGEND[c.ageClass][0]}` }),
+            h('strong', {}, `${c.distKm} km`),
+            ` al ${c.direction}${c.n > 1 ? ` (${c.n} núcleos)` : ''}`,
+            h('span', { class: 'muted' }, ` · ${GLM_LEGEND[c.ageClass][1]} antes de la imagen`),
+          ),
         ),
       )
     : h('p', {}, `Sin rayos a menos de ${R[0]} km del cerro.`);
@@ -456,21 +519,21 @@ function renderCharts(d) {
   const gust = niceScale(Math.max(gustPeak * 1.15, T.gust[0] * 1.1));
   chartCard('#chart-gust', {
     title: 'Ráfagas de viento',
-    sub: 'Línea: mediana de las fuentes. Franja: de la fuente más baja a la más alta (km/h).',
+    sub: 'Línea: mediana de las fuentes. Franja: de la fuente más baja a la más alta (m/s).',
     kind: 'line',
     values: tl.map((x) => x.gustMed),
     band: { min: tl.map((x) => x.gustMin), max: tl.map((x) => x.gustMax) },
     ...gust,
-    thresholds: T.gust.map((v, i) => ({ value: v, label: `${LEVELS[i + 1]} ${v} km/h` })),
+    thresholds: T.gust.map((v, i) => ({ value: v, label: `${LEVELS[i + 1]} ${v} m/s` })),
     format: (v) => fmtNum(v, 0),
-    peakLabel: (v) => `${fmtNum(v, 0)} km/h`,
+    peakLabel: (v) => `${fmtNum(v, 1)} m/s`,
     tooltip: (i) => [
-      { key: true, value: `${fmtNum(tl[i].gustMed, 0)} km/h`, label: 'mediana' },
-      { value: `${fmtNum(tl[i].gustMin, 0)}–${fmtNum(tl[i].gustMax, 0)} km/h`, label: 'rango entre fuentes' },
+      { key: true, value: `${fmtNum(tl[i].gustMed, 1)} m/s`, label: 'mediana' },
+      { value: `${fmtNum(tl[i].gustMin, 1)}–${fmtNum(tl[i].gustMax, 1)} m/s`, label: 'rango entre fuentes' },
     ],
     table: {
-      columns: ['Hora', 'Mediana (km/h)', 'Mínimo (km/h)', 'Máximo (km/h)'],
-      row: (x) => [fmtShort(x.t), fmtNum(x.gustMed, 0), fmtNum(x.gustMin, 0), fmtNum(x.gustMax, 0)],
+      columns: ['Hora', 'Mediana (m/s)', 'Mínimo (m/s)', 'Máximo (m/s)'],
+      row: (x) => [fmtShort(x.t), fmtNum(x.gustMed, 1), fmtNum(x.gustMin, 1), fmtNum(x.gustMax, 1)],
     },
   });
 }
@@ -529,7 +592,10 @@ function renderObs(d) {
       o.hail && 'Granizo',
       o.heavyRain ? 'Lluvia intensa' : o.rain && 'Lluvia',
     ].filter(Boolean);
-    const wind = o.windKmh != null ? `Viento ${o.windKmh} km/h${o.gustKmh ? `, ráfagas ${o.gustKmh} km/h` : ''}` : null;
+    const ms = (v, kmh) => (v ?? (kmh != null ? Math.round((kmh / 3.6) * 10) / 10 : null));
+    const windMs = ms(o.windMs, o.windKmh);
+    const gustMs = ms(o.gustMs, o.gustKmh);
+    const wind = windMs != null ? `Viento ${fmtNum(windMs)} m/s${gustMs ? `, ráfagas ${fmtNum(gustMs)} m/s` : ''}` : null;
     return h(
       'article',
       { class: 'card' },
@@ -564,22 +630,15 @@ function renderObs(d) {
   );
 }
 
-function renderMeteored(d) {
+/** El mapa de Meteored se carga al abrir su pestaña (y una sola vez). */
+function renderMeteored() {
   const box = $('#meteored');
-  if (box.querySelector('iframe')) return; // ya cargado: no se recarga en cada actualización
-  const url = d.meteoredUrl || 'https://www.meteored.cl/avisos-meteorologicos/';
-  const open = h('a', { href: url, target: '_blank', rel: 'noopener', class: 'btn btn-ghost' }, 'Abrir en Meteored');
-  const show = () => {
-    store.set(KEYS.meteored, 'si');
-    box.replaceChildren(
-      h('iframe', { src: url, title: 'Mapa de avisos meteorológicos de Meteored', loading: 'lazy', referrerpolicy: 'strict-origin-when-cross-origin' }),
-      h('p', { class: 'meta' }, 'Contenido de Meteored. ', h('a', { href: url, target: '_blank', rel: 'noopener' }, 'Abrir en una ventana aparte')),
-    );
-  };
-  if (store.get(KEYS.meteored) === 'si') return show();
-  const btn = h('button', { class: 'btn', type: 'button' }, 'Mostrar el mapa');
-  btn.addEventListener('click', show);
-  box.replaceChildren(h('div', { class: 'meteored-cta' }, btn, open, h('span', { class: 'muted' }, 'Se carga desde meteored.cl (incluye su publicidad).')));
+  if (box.querySelector('iframe') || currentTab !== 'mapa') return;
+  const url = data?.meteoredUrl || 'https://www.meteored.cl/avisos-meteorologicos/';
+  box.replaceChildren(
+    h('iframe', { src: url, title: 'Mapa de avisos meteorológicos de Meteored', referrerpolicy: 'strict-origin-when-cross-origin' }),
+    h('p', { class: 'meta' }, 'Contenido de Meteored (incluye su publicidad). ', h('a', { href: url, target: '_blank', rel: 'noopener' }, 'Abrir en una ventana aparte')),
+  );
 }
 
 // --- Comparación de fuentes ---------------------------------------------------
@@ -625,11 +684,11 @@ const COMPARE_METRICS = {
   },
   viento: {
     tab: 'Ráfagas',
-    sub: 'Ráfaga máxima de cada hora, en km/h. MET Norway no entrega ráfagas para Chile.',
+    sub: 'Ráfaga máxima de cada hora, en m/s (Alerta desde 15 m/s). MET Norway no entrega ráfagas para Chile.',
     values: (s) => s.gust,
     reference: (d) => d.timeline.map((x) => x.gustMed),
-    unit: 'km/h',
-    digits: 0,
+    unit: 'm/s',
+    digits: 1,
     hazards: ['viento'],
   },
   temperatura: {
@@ -792,7 +851,7 @@ function tableView(columns, rows) {
 }
 
 function renderModels(d) {
-  const cols = ['Fuente', 'Lluvia máx. 24 h (mm)', 'Lluvia máx. 1 h (mm)', 'Ráfaga máx. (km/h)', 'Horas con tormenta', 'CAPE máx. (J/kg)', 'T máx. (°C)', 'T mín. (°C)'];
+  const cols = ['Fuente', 'Lluvia máx. 24 h (mm)', 'Lluvia máx. 1 h (mm)', 'Ráfaga máx. (m/s)', 'Horas con tormenta', 'CAPE máx. (J/kg)', 'UV máx.', 'T máx. (°C)', 'T mín. (°C)'];
   $('#models').replaceChildren(
     h(
       'table',
@@ -806,7 +865,7 @@ function renderModels(d) {
             'tr',
             {},
             h('td', {}, h('i', { class: 'line-key', style: `background:${sourceColor(p.id)}` }), `${p.name} `, h('span', { class: 'muted' }, `(${p.origin})`)),
-            [fmtNum(p.rain24), fmtNum(p.rain1h), fmtNum(p.gust, 0), p.thunderHours, fmtNum(p.cape, 0), fmtNum(p.tmax), fmtNum(p.tmin)].map((v) =>
+            [fmtNum(p.rain24), fmtNum(p.rain1h), fmtNum(p.gust, 1), p.thunderHours, fmtNum(p.cape, 0), fmtNum(p.uv, 0), fmtNum(p.tmax), fmtNum(p.tmin)].map((v) =>
               h('td', { class: 'num' }, v),
             ),
           ),
@@ -818,7 +877,7 @@ function renderModels(d) {
 
 function renderHistory(d) {
   const items = d.history.map((e) =>
-    h('li', {}, levelMark(e.to ?? 0), h('div', {}, h('time', {}, `${fmtShort(e.at)}${e.emailed ? ' · correo enviado' : ''}`), e.text)),
+    h('li', {}, levelMark(e.to ?? 0), h('div', {}, h('time', {}, `${fmtShort(e.at)}${e.emailed ? ' · incluido en el boletín' : ''}`), e.text)),
   );
   $('#history').replaceChildren(
     items.length ? h('ul', { class: 'timeline-list' }, items) : h('p', { class: 'empty-state' }, 'Aún no hay eventos registrados.'),
@@ -846,13 +905,13 @@ function renderSources(d) {
     ),
   );
   const e = d.email;
+  const schedule = e.schedule ? `Boletín a las ${e.schedule.join(', ').replace(/, ([^,]*)$/, ' y $1')}.` : '';
+  const next = e.next ? ` Próximo: ${fmtShort(e.next)}${e.pending ? ` (${e.pending} cambio${e.pending === 1 ? '' : 's'} por informar)` : ''}.` : '';
   const emailText = e.paused
-    ? 'En pausa: no se envían correos. Para activarlos, ejecuta reanudarCorreos en Apps Script.'
+    ? `En pausa: no se envían correos. ${schedule} Para activarlos, ejecuta reanudarCorreos en Apps Script.`
     : !e.configured
       ? 'Correo no configurado.'
-      : e.last
-        ? `Último correo ${ago(e.last.at)}: “${e.last.subject}”${e.last.ok || e.last.skipped ? '' : ` · error: ${e.last.error}`}`
-        : 'Activo. Aún no se ha enviado ninguna alerta.';
+      : `${schedule}${next}${e.last ? ` Último: ${ago(e.last.at)}, “${e.last.subject}”${e.last.ok || e.last.skipped ? '' : ` · error: ${e.last.error}`}.` : ''}`;
   rows.push(
     h(
       'li',
@@ -917,9 +976,11 @@ function updateBadge(d) {
 // --- Carga ---------------------------------------------------------------------
 
 function render(d) {
-  $('#app').classList.remove('sin-datos');
+  document.body.classList.remove('sin-datos');
   data = d;
   tz = d.location.timezone;
+  renderOverall(d);
+  renderStorm(d);
   renderEarly(d);
   renderHero(d);
   renderHazards(d);
@@ -927,7 +988,7 @@ function render(d) {
   renderCharts(d);
   renderDmc(d);
   renderObs(d);
-  renderMeteored(d);
+  renderMeteored();
   renderCompare(d);
   renderModels(d);
   renderHistory(d);
@@ -951,11 +1012,12 @@ function banner(text) {
 const GUIDE_URL = 'https://github.com/javiersalgadokaiser-dev/alerta-san-cristobal/blob/main/google-apps-script/INSTRUCCIONES.md';
 
 function showSetup(message) {
-  $('#app').classList.add('sin-datos');
-  $('#hero').className = 'hero lvl-1';
+  document.body.classList.add('sin-datos');
+  activate('resumen', { updateHash: false });
+  $('#storm').className = 'hero lvl-1';
   const btn = h('button', { class: 'btn', type: 'button' }, 'Abrir ajustes');
   btn.addEventListener('click', openSettings);
-  $('#hero').replaceChildren(
+  $('#storm').replaceChildren(
     h(
       'div',
       { class: 'hero-text' },
@@ -1096,6 +1158,48 @@ $('#install').addEventListener('click', async () => {
   $('#install').hidden = true;
 });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+
+// --- Pestañas ------------------------------------------------------------------
+
+const TABS = ['resumen', 'peligros', 'pronostico', 'comparacion', 'mapa', 'historial'];
+const tabFromHash = () => (TABS.includes(location.hash.slice(1)) ? location.hash.slice(1) : null);
+
+function activate(tab, { updateHash = true, focus = false } = {}) {
+  currentTab = tab;
+  for (const b of document.querySelectorAll('.tabbar [role="tab"]')) {
+    const on = b.dataset.tab === tab;
+    b.setAttribute('aria-selected', String(on));
+    b.tabIndex = on ? 0 : -1;
+    if (on) {
+      if (focus) b.focus();
+      b.scrollIntoView({ block: 'nearest', inline: 'nearest' }); // en el celular la barra se desplaza
+    }
+  }
+  for (const p of document.querySelectorAll('.tab-panel')) p.hidden = p.dataset.panel !== tab;
+  store.set(KEYS.tab, tab);
+  if (updateHash && location.hash.slice(1) !== tab) history.replaceState(null, '', `#${tab}`);
+  renderMeteored();
+}
+
+$('.tabbar').addEventListener('click', (e) => {
+  const b = e.target.closest('[role="tab"]');
+  if (!b) return;
+  activate(b.dataset.tab);
+  window.scrollTo({ top: 0 });
+});
+$('.tabbar').addEventListener('keydown', (e) => {
+  const i = TABS.indexOf(currentTab);
+  const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: TABS.length - 1 }[e.key];
+  if (next == null) return;
+  e.preventDefault();
+  activate(TABS[(next + TABS.length) % TABS.length], { focus: true });
+});
+window.addEventListener('hashchange', () => tabFromHash() && activate(tabFromHash(), { updateHash: false }));
+$('#overall').addEventListener('click', () => {
+  activate('peligros');
+  window.scrollTo({ top: 0 });
+});
+activate(tabFromHash() || (TABS.includes(store.get(KEYS.tab)) ? store.get(KEYS.tab) : 'resumen'), { updateHash: false });
 
 $('#refresh').addEventListener('click', load);
 document.addEventListener('visibilitychange', () => {

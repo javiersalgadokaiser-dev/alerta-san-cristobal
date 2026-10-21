@@ -1,4 +1,4 @@
-import { HOUR, LEVELS, clone, escapeHtml, formatLocal, formatRange } from './util.js';
+import { HOUR, LEVELS, clone, escapeHtml, formatLocal, formatRange, localParts, localToUtc } from './util.js';
 
 const STATUS_HEX = ['#0ca30c', '#fab219', '#ec835a', '#d03b3b'];
 
@@ -10,11 +10,12 @@ function evidenceWhen(e, tz) {
 }
 
 /**
- * Compara el resultado actual con lo ya notificado y decide qué avisar:
- * - "sube": un peligro pasa a un nivel mayor (se avisa de inmediato).
+ * Compara el resultado actual con lo ya registrado y decide qué cambió:
+ * - "sube": un peligro pasa a un nivel mayor.
  * - "baja" / "fin": el nivel se mantiene menor durante `downgradeAfterHours`.
  * - "dmc": la DMC publica un aviso nuevo (o actualizado) para la zona.
  * Si faltan los pronósticos (`degraded`), solo se procesan subidas.
+ * Los cambios quedan en el historial y se informan en el siguiente boletín.
  */
 export function diffAlerts(state, result, dmcAlerts, now, { downgradeAfterHours }, degraded = false) {
   const changes = [];
@@ -44,7 +45,38 @@ export function diffAlerts(state, result, dmcAlerts, now, { downgradeAfterHours 
   return { changes, notified, dmcSeen };
 }
 
-const rank = (c) => ({ sube: 10, dmc: 10, baja: 5, fin: 1 })[c.type] + (c.to ?? 0);
+// --- Horarios del boletín -------------------------------------------------------
+
+const pad2 = (n) => String(n).padStart(2, '0');
+
+/**
+ * ¿Toca enviar boletín ahora? Devuelve { key, label } si ya pasó una de las horas
+ * configuradas (hoy, hora de Santiago), dentro de la ventana de reintento, y ese
+ * boletín aún no se envió (`lastKey`).
+ */
+export function dueBulletin(now, lastKey, { bulletinHours, bulletinWindowMinutes }, tz) {
+  const p = localParts(now, tz);
+  for (const hour of [...bulletinHours].sort((a, b) => b - a)) {
+    const slot = localToUtc(p.y, p.mo, p.d, hour, tz);
+    if (slot <= now && now - slot < bulletinWindowMinutes * 60000) {
+      const key = `${p.y}-${pad2(p.mo)}-${pad2(p.d)} ${pad2(hour)}:00`;
+      return key === lastKey ? null : { key, label: `${pad2(hour)}:00` };
+    }
+  }
+  return null;
+}
+
+/** Instante del próximo boletín (hoy o mañana). */
+export function nextBulletin(now, { bulletinHours }, tz) {
+  const p = localParts(now, tz);
+  const hours = [...bulletinHours].sort((a, b) => a - b);
+  for (const hour of hours) {
+    const slot = localToUtc(p.y, p.mo, p.d, hour, tz);
+    if (slot > now) return slot;
+  }
+  const t = localParts(now + 24 * HOUR, tz);
+  return localToUtc(t.y, t.mo, t.d, hours[0], tz);
+}
 
 /** Texto de una línea por cambio (para el correo y el historial). */
 export function describeChange(c, result, dmcAlerts, tz) {
@@ -71,21 +103,25 @@ export function describeChange(c, result, dmcAlerts, tz) {
   }
 }
 
-export function buildAlertEmail(changes, result, dmcAlerts, { location, dashboardUrl }) {
+/**
+ * Boletín de las 7:00, 13:00 y 18:00: estado actual, alerta temprana y los
+ * cambios registrados desde el boletín anterior (`pending`).
+ */
+export function buildBulletinEmail(pending, result, { location, dashboardUrl, label }) {
   const tz = location.timezone;
-  const ranked = [...changes].sort((a, b) => rank(b) - rank(a));
-  const top = ranked[0];
-  const h = result.hazards.find((x) => x.id === top.hazardId) ?? { name: 'Aviso DMC' };
-  let subject;
-  if (ranked.every((c) => c.type === 'fin')) {
-    subject = `✅ Fin de alerta: ${ranked.map((c) => result.hazards.find((x) => x.id === c.hazardId)?.name).join(', ')} — ${location.name}`;
-  } else if (top.type === 'baja' || top.type === 'fin') {
-    subject = `↘️ ${h.name} baja a ${LEVELS[top.to].name} — ${location.name}`;
-  } else {
-    subject = `${LEVELS[top.to].emoji} ${LEVELS[top.to].name.toUpperCase()} · ${h.name} — ${location.name}`;
-  }
-  const lines = ranked.map((c) => describeChange(c, result, dmcAlerts, tz));
-  return render({ subject, intro: 'Cambios detectados:', lines, result, location, dashboardUrl });
+  const o = result.overall;
+  const main = result.hazards.find((x) => x.id === o.hazardId);
+  const state = o.level ? `${LEVELS[o.level].name.toUpperCase()}: ${main ? main.name : o.headline}` : 'Sin alertas';
+  return render({
+    subject: `${LEVELS[o.level].emoji} Boletín ${label} · ${state} — ${location.name}`,
+    intro: pending.length
+      ? `Cambios desde el boletín anterior (${pending.length}):`
+      : 'Sin cambios de nivel desde el boletín anterior.',
+    lines: pending.map((p) => `${formatLocal(p.at, tz)} · ${p.text}`),
+    result,
+    location,
+    dashboardUrl,
+  });
 }
 
 export function buildTestEmail(result, { location, dashboardUrl }) {
