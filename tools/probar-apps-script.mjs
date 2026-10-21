@@ -32,9 +32,16 @@ for (const host of ['www.meteochile.gob.cl', 'archivos.meteochile.gob.cl', 'clim
 }
 
 const stats = { fetches: 0, bytes: 0 };
+// FALLAS_OPENMETEO=n: las primeras n consultas a Open-Meteo responden 429 (como pasa en Google)
+let openMeteoFailures = Number(process.env.FALLAS_OPENMETEO) || 0;
 const UrlFetchApp = {
   fetch(url, params = {}) {
     stats.fetches++;
+    if (openMeteoFailures > 0 && url.includes('open-meteo.com')) {
+      openMeteoFailures--;
+      stats.rejected = (stats.rejected || 0) + 1;
+      return { getResponseCode: () => 429, getAllHeaders: () => ({}), getContentText: () => '{"error":true,"reason":"Too many requests"}', getContent: () => [] };
+    }
     const head = join(work, 'h.txt');
     const body = join(work, 'b.bin');
     const args = ['-s', '-L', '--max-time', '40', '-D', head, '-o', body, '-w', '%{http_code}', ...resolveArgs];
@@ -127,6 +134,12 @@ const log = (...a) => {
 
 const context = vm.createContext({
   UrlFetchApp,
+  Utilities: {
+    sleep: (ms) => {
+      stats.slept = (stats.slept || 0) + ms;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.min(ms, 200)); // acortado en la prueba
+    },
+  },
   PropertiesService: { getScriptProperties: () => scriptProperties },
   CacheService: { getScriptCache: () => scriptCache },
   MailApp: {
@@ -166,6 +179,7 @@ const rayos = JSON.parse(run("doGet({ parameter: { accion: 'rayos' } })").getCon
 
 console.log(`\n▶ Resumen`);
 console.log(`  Tiempo de la primera revisión: ${ms1} ms · ${stats.fetches} descargas · ${Math.round(stats.bytes / 1024)} KB`);
+if (stats.rejected) console.log(`  Open-Meteo rechazó ${stats.rejected} consultas (simulado); pausas entre reintentos: ${stats.slept || 0} ms`);
 console.log(`  Activadores: ${triggers.map((t) => `${t.fn} cada ${t.n} min`).join(', ')}`);
 if (status.pendiente) {
   console.log(`  doGet: SIN ESTADO → ${status.mensaje}`);

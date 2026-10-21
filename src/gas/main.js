@@ -102,7 +102,12 @@ const mailer = {
 };
 
 function settings() {
-  return { dashboardUrl: setting('URL_PANEL') || PANEL_URL, contact: setting('URL_PANEL') || PANEL_URL };
+  return {
+    dashboardUrl: setting('URL_PANEL') || PANEL_URL,
+    contact: setting('URL_PANEL') || PANEL_URL,
+    // Clave del plan pagado de Open-Meteo (opcional; necesaria para uso comercial)
+    openMeteoKey: setting('OPENMETEO_APIKEY'),
+  };
 }
 
 // --- Funciones que se ejecutan desde Apps Script ------------------------------

@@ -63,6 +63,12 @@ var AlertaSC = (() => {
   if (typeof root.fetch === "undefined") {
     root.fetch = gasFetch;
   }
+  if (typeof Utilities !== "undefined" && typeof root.__alertaSleep === "undefined") {
+    root.__alertaSleep = (ms) => {
+      Utilities.sleep(ms);
+      return Promise.resolve();
+    };
+  }
   function gasFetch(url, opts = {}) {
     const params = {
       method: (opts.method || "get").toLowerCase(),
@@ -190,7 +196,7 @@ var AlertaSC = (() => {
     // CAPE (energía convectiva, J/kg) que se considera atmósfera muy inestable.
     cape: 1e3
   };
-  var OPEN_METEO_CACHE_MINUTES = 30;
+  var OPEN_METEO_CACHE_MINUTES = 60;
   var NOTIFY = {
     // Horas que un peligro debe mantenerse en un nivel menor antes de avisar que
     // bajó o terminó. Evita correos repetidos cuando un pronóstico oscila.
@@ -200,6 +206,7 @@ var AlertaSC = (() => {
 
   // src/util.js
   var HOUR = 36e5;
+  var sleep = (ms) => typeof globalThis.__alertaSleep === "function" ? globalThis.__alertaSleep(ms) : Promise.resolve();
   var LEVELS = [
     { level: 0, key: "normal", name: "Normal", color: "verde", emoji: "🟢" },
     { level: 1, key: "aviso", name: "Aviso", color: "amarillo", emoji: "🟡" },
@@ -975,13 +982,19 @@ Panel: ${dashboardUrl}` : ""
   // src/sources/http.js
   var APP_UA = "AlertaTempranaCerroSanCristobal/1.0";
   var BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36";
-  async function fetchJson(url, { headers = {}, timeout = 2e4 } = {}) {
-    const res = await fetch(url, {
-      headers: { "User-Agent": APP_UA, Accept: "application/json", ...headers },
-      signal: AbortSignal.timeout(timeout)
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status} desde ${url.replace(/^https?:\/\/([^/]+).*$/, "$1")}`);
-    return res.json();
+  async function fetchJson(url, { headers = {}, timeout = 2e4, retries = 0 } = {}) {
+    for (let attempt = 0; ; attempt++) {
+      const res = await fetch(url, {
+        headers: { "User-Agent": APP_UA, Accept: "application/json", ...headers },
+        signal: AbortSignal.timeout(timeout)
+      });
+      if ((res.status === 429 || res.status >= 500) && attempt < retries) {
+        await sleep(3e3 * (attempt + 1));
+        continue;
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status} desde ${url.replace(/^https?:\/\/([^/]+).*$/, "$1")}${attempt ? ` (tras ${attempt + 1} intentos)` : ""}`);
+      return res.json();
+    }
   }
 
   // src/sources/aviation.js
@@ -3538,7 +3551,7 @@ Panel: ${dashboardUrl}` : ""
     "wind_gusts_10m",
     "snowfall"
   ];
-  async function fetchOpenMeteo(location, models, hours) {
+  async function fetchOpenMeteo(location, models, hours, { apiKey } = {}) {
     const params = {
       latitude: location.lat,
       longitude: location.lon,
@@ -3550,8 +3563,10 @@ Panel: ${dashboardUrl}` : ""
       timezone: "GMT",
       wind_speed_unit: "kmh"
     };
+    if (apiKey) params.apikey = apiKey;
     const query = Object.entries(params).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&");
-    const json = await fetchJson(`https://api.open-meteo.com/v1/forecast?${query}`);
+    const host = apiKey ? "customer-api.open-meteo.com" : "api.open-meteo.com";
+    const json = await fetchJson(`https://${host}/v1/forecast?${query}`, { retries: 2 });
     if (json.error) throw new Error(`Open-Meteo: ${json.reason}`);
     return parseOpenMeteo(json, models);
   }
@@ -3615,7 +3630,7 @@ Panel: ${dashboardUrl}` : ""
     const models = await track("openmeteo", `Open-Meteo (${MODELS2.length} modelos globales)`, "https://open-meteo.com", async () => {
       const c = state.cache.openmeteo;
       if (c && now - c.fetchedAt < OPEN_METEO_CACHE_MINUTES2 * 6e4) return reuse("openmeteo", `${c.data.length} modelos`);
-      const data = await fetchOpenMeteo(LOCATION2, MODELS2, HORIZON_HOURS2 + 2);
+      const data = await fetchOpenMeteo(LOCATION2, MODELS2, HORIZON_HOURS2 + 2, { apiKey: settings2.openMeteoKey });
       return fresh("openmeteo", data, `${data.length} modelos`);
     });
     const metno = await track("metno", "MET Norway", "https://api.met.no", async () => {
@@ -3848,7 +3863,12 @@ Panel: ${dashboardUrl}` : ""
     }
   };
   function settings() {
-    return { dashboardUrl: setting("URL_PANEL") || PANEL_URL, contact: setting("URL_PANEL") || PANEL_URL };
+    return {
+      dashboardUrl: setting("URL_PANEL") || PANEL_URL,
+      contact: setting("URL_PANEL") || PANEL_URL,
+      // Clave del plan pagado de Open-Meteo (opcional; necesaria para uso comercial)
+      openMeteoKey: setting("OPENMETEO_APIKEY")
+    };
   }
   async function revisar() {
     const lock = LockService.getScriptLock();

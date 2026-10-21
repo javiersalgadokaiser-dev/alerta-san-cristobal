@@ -182,7 +182,9 @@ Todo funciona con cuentas gratuitas:
   usa entre 5 y 15. El uso real se ve en **Ejecuciones**.
 - **Gmail**: hasta 100 correos al día.
 - **Almacenamiento**: unos 60 KB de los 500 KB disponibles.
-- **Open-Meteo**: uso no comercial gratuito.
+- **Open-Meteo**: la API gratuita es solo para uso no comercial y limita las consultas por IP
+  (en Google a veces responde 429; el sistema reintenta y usa datos de hasta 6 h). Para uso en
+  la empresa corresponde un plan pagado: su clave va en la propiedad `OPENMETEO_APIKEY`.
 
 ## Importante
 

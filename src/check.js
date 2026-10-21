@@ -19,7 +19,7 @@ const MAX_EMAIL_RETRIES = 6;
  * No depende de la plataforma; recibe:
  *   kv:       { get(clave) → objeto | null, put(clave, objeto) }
  *   mailer:   { configured, send({ subject, html, text }) → { ok, skipped?, error? } }
- *   settings: { dashboardUrl, contact, dmcUrl }
+ *   settings: { dashboardUrl, contact, dmcUrl, openMeteoKey }
  */
 export async function runCheck({ kv, mailer, settings = {}, now = Date.now() }) {
   const state = (await kv.get('state')) || {};
@@ -54,7 +54,7 @@ export async function runCheck({ kv, mailer, settings = {}, now = Date.now() }) 
   const models = await track('openmeteo', `Open-Meteo (${MODELS.length} modelos globales)`, 'https://open-meteo.com', async () => {
     const c = state.cache.openmeteo;
     if (c && now - c.fetchedAt < OPEN_METEO_CACHE_MINUTES * 60000) return reuse('openmeteo', `${c.data.length} modelos`);
-    const data = await fetchOpenMeteo(LOCATION, MODELS, HORIZON_HOURS + 2);
+    const data = await fetchOpenMeteo(LOCATION, MODELS, HORIZON_HOURS + 2, { apiKey: settings.openMeteoKey });
     return fresh('openmeteo', data, `${data.length} modelos`);
   });
 

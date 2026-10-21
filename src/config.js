@@ -87,9 +87,10 @@ export const THRESHOLDS = {
   cape: 1000,
 };
 
-// Cada cuánto se vuelve a consultar Open-Meteo (los modelos cambian cada hora;
-// así se ahorran llamadas y tiempo de ejecución en Google).
-export const OPEN_METEO_CACHE_MINUTES = 30;
+// Cada cuánto se vuelve a consultar Open-Meteo. Los modelos se actualizan cada
+// 1 a 6 horas, y la API gratuita limita las consultas por dirección IP (en Google
+// muchas cuentas comparten IP), así que no conviene consultar más seguido.
+export const OPEN_METEO_CACHE_MINUTES = 60;
 
 export const NOTIFY = {
   // Horas que un peligro debe mantenerse en un nivel menor antes de avisar que

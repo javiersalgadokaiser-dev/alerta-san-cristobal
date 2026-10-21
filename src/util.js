@@ -4,6 +4,9 @@
 
 export const HOUR = 3600000;
 
+/** Pausa entre reintentos. En Apps Script usa Utilities.sleep (ver gas/polyfills.js). */
+export const sleep = (ms) => (typeof globalThis.__alertaSleep === 'function' ? globalThis.__alertaSleep(ms) : Promise.resolve());
+
 export const LEVELS = [
   { level: 0, key: 'normal', name: 'Normal', color: 'verde', emoji: '🟢' },
   { level: 1, key: 'aviso', name: 'Aviso', color: 'amarillo', emoji: '🟡' },

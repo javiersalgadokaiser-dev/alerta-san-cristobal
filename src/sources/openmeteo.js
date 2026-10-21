@@ -12,7 +12,11 @@ const VARIABLES = [
   'snowfall',
 ];
 
-export async function fetchOpenMeteo(location, models, hours) {
+/**
+ * Sin clave usa la API gratuita (solo uso no comercial, con límite por dirección
+ * IP). Con `apiKey` (plan pagado de Open-Meteo) usa customer-api.open-meteo.com.
+ */
+export async function fetchOpenMeteo(location, models, hours, { apiKey } = {}) {
   const params = {
     latitude: location.lat,
     longitude: location.lon,
@@ -24,10 +28,12 @@ export async function fetchOpenMeteo(location, models, hours) {
     timezone: 'GMT',
     wind_speed_unit: 'kmh',
   };
+  if (apiKey) params.apikey = apiKey;
   const query = Object.entries(params)
     .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
     .join('&');
-  const json = await fetchJson(`https://api.open-meteo.com/v1/forecast?${query}`);
+  const host = apiKey ? 'customer-api.open-meteo.com' : 'api.open-meteo.com';
+  const json = await fetchJson(`https://${host}/v1/forecast?${query}`, { retries: 2 });
   if (json.error) throw new Error(`Open-Meteo: ${json.reason}`);
   return parseOpenMeteo(json, models);
 }

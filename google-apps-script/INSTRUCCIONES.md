@@ -69,6 +69,14 @@ Por defecto los correos llegan solo a tu Gmail. Para agregar a otras personas:
 Google permite enviar hasta 100 correos al día desde una cuenta Gmail. Cada alerta cuenta un
 correo por destinatario.
 
+## Clave de Open-Meteo (recomendada para uso en la empresa)
+
+La API gratuita de Open-Meteo es solo para **uso no comercial** y limita las consultas por
+dirección IP. En Google muchas cuentas comparten IP, así que a veces responde "demasiadas
+solicitudes" (el sistema reintenta y, si sigue fallando, usa los datos de la última hora). Con
+un plan de [Open-Meteo](https://open-meteo.com/en/pricing) se evita el límite: agrega la propiedad
+`OPENMETEO_APIKEY` con la clave, igual que `CORREOS`.
+
 ## Funciones disponibles
 
 | Función | Qué hace |

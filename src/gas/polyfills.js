@@ -10,6 +10,14 @@ if (typeof root.fetch === 'undefined') {
   root.fetch = gasFetch;
 }
 
+// Apps Script no tiene setTimeout: las pausas entre reintentos usan Utilities.sleep.
+if (typeof Utilities !== 'undefined' && typeof root.__alertaSleep === 'undefined') {
+  root.__alertaSleep = (ms) => {
+    Utilities.sleep(ms);
+    return Promise.resolve();
+  };
+}
+
 /** fetch() mínimo sobre UrlFetchApp (síncrono por dentro). */
 function gasFetch(url, opts = {}) {
   const params = {
