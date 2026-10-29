@@ -661,12 +661,60 @@ const WINDY_LAYERS = { thunder: 'Tormentas eléctricas', gust: 'Ráfagas', rain:
 let mapChoice = MAPS[store.get('alerta-sc-mapa')] ? store.get('alerta-sc-mapa') : 'xweather';
 let windyLayer = WINDY_LAYERS[store.get('alerta-sc-windy')] ? store.get('alerta-sc-windy') : 'thunder';
 let mapShown = null; // evita recargar el mismo mapa en cada actualización
-let xwMap = null;
+let summaryShown = { xweather: null, windy: null };
+let xwMapLoad = null; // { time, promise } de la última imagen pedida
 
-/** Los mapas se cargan al abrir la pestaña Mapas. */
+const xwKey = () => `${Boolean(data.xweather?.configured)}:${data.xweather?.map?.time ?? ''}`;
+
+/** Los mapas se cargan solo con su pestaña visible (Windy no se dibuja bien oculto). */
+function renderMapViews() {
+  renderSummaryMaps();
+  renderMaps();
+}
+
+function windyLayerButtons(onPick) {
+  return h(
+    'div',
+    { class: 'row map-layers' },
+    Object.entries(WINDY_LAYERS).map(([id, label]) => {
+      const b = h('button', { type: 'button', class: 'legend-item', 'aria-pressed': String(id === windyLayer) }, label);
+      b.addEventListener('click', () => {
+        windyLayer = id;
+        store.set('alerta-sc-windy', id);
+        onPick();
+      });
+      return b;
+    }),
+  );
+}
+
+function windyFrame() {
+  const p = data.location;
+  const params = new URLSearchParams({
+    type: 'map', location: 'coordinates', metricRain: 'mm', metricTemp: '°C', metricWind: 'm/s', zoom: '8',
+    overlay: windyLayer, product: 'ecmwf', level: 'surface', lat: p.lat, lon: p.lon, detailLat: p.lat, detailLon: p.lon, marker: 'true', message: 'true',
+  });
+  return h('iframe', { src: `${data.windyEmbed || 'https://embed.windy.com/embed.html'}?${params}`, title: 'Mapa de Windy', referrerpolicy: 'strict-origin-when-cross-origin', loading: 'lazy' });
+}
+
+/** Resumen: mapa de tormentas de Xweather y Windy, lado a lado. */
+function renderSummaryMaps() {
+  if (currentTab !== 'resumen' || !data) return;
+  if (summaryShown.xweather !== xwKey()) {
+    summaryShown.xweather = xwKey();
+    renderXweatherMap($('#sum-xweather'));
+  }
+  if (summaryShown.windy !== windyLayer) {
+    summaryShown.windy = windyLayer;
+    // capas debajo, como la nota bajo el mapa de Xweather: así ambos mapas quedan alineados
+    $('#sum-windy').replaceChildren(windyFrame(), windyLayerButtons(renderSummaryMaps));
+  }
+}
+
+/** Pestaña Mapas: un mapa a la vez. */
 function renderMaps() {
   if (currentTab !== 'mapa' || !data) return;
-  const key = `${mapChoice}:${windyLayer}:${mapChoice === 'xweather' ? data.xweather?.map?.time : ''}`;
+  const key = `${mapChoice}:${windyLayer}:${mapChoice === 'xweather' ? xwKey() : ''}`;
   $('#map-switch').replaceChildren(
     ...Object.entries(MAPS).map(([id, m]) => {
       const b = h('button', { type: 'button', role: 'tab', class: 'tab', 'aria-selected': String(id === mapChoice) }, m.tab);
@@ -684,28 +732,7 @@ function renderMaps() {
   const sub = $('#map-sub');
   if (mapChoice === 'windy') {
     sub.textContent = 'Mapa interactivo de Windy centrado en el cerro. Dentro del mapa se puede cambiar el modelo (ECMWF, GFS, ICON…) y avanzar en el tiempo.';
-    const p = data.location;
-    const params = new URLSearchParams({
-      type: 'map', location: 'coordinates', metricRain: 'mm', metricTemp: '°C', metricWind: 'm/s', zoom: '8',
-      overlay: windyLayer, product: 'ecmwf', level: 'surface', lat: p.lat, lon: p.lon, detailLat: p.lat, detailLon: p.lon, marker: 'true', message: 'true',
-    });
-    const layers = h(
-      'div',
-      { class: 'row map-layers' },
-      Object.entries(WINDY_LAYERS).map(([id, label]) => {
-        const b = h('button', { type: 'button', class: 'legend-item', 'aria-pressed': String(id === windyLayer) }, label);
-        b.addEventListener('click', () => {
-          windyLayer = id;
-          store.set('alerta-sc-windy', id);
-          renderMaps();
-        });
-        return b;
-      }),
-    );
-    box.replaceChildren(
-      layers,
-      h('iframe', { src: `${data.windyEmbed || 'https://embed.windy.com/embed.html'}?${params}`, title: 'Mapa de Windy', referrerpolicy: 'strict-origin-when-cross-origin' }),
-    );
+    box.replaceChildren(windyLayerButtons(renderMaps), windyFrame());
   } else if (mapChoice === 'meteored') {
     sub.textContent = 'Mapa interactivo de Meteored con los avisos meteorológicos de todo Chile (los publica la DMC). Incluye su publicidad.';
     const url = data.meteoredUrl || 'https://www.meteored.cl/avisos-meteorologicos/';
@@ -714,13 +741,27 @@ function renderMaps() {
       h('p', { class: 'meta' }, h('a', { href: url, target: '_blank', rel: 'noopener' }, 'Abrir Meteored en una ventana aparte')),
     );
   } else {
-    renderXweatherMap(box, sub);
+    sub.textContent = 'Rayos nube-tierra de los últimos 15 minutos (red Vaisala), radar global completado con satélite y relieve. Anillos a 15, 40 y 100 km del cerro.';
+    renderXweatherMap(box);
   }
 }
 
-function renderXweatherMap(box, sub) {
+/** La imagen se pide una sola vez por mapa, aunque se muestre en dos pestañas. */
+function loadXwMap(time) {
+  if (xwMapLoad?.time !== time) {
+    const promise = fetch(`${apiUrl()}?accion=mapa`, { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((b) => {
+        if (!b.map) throw new Error('sin mapa');
+        return b.map;
+      });
+    xwMapLoad = { time, promise };
+  }
+  return xwMapLoad.promise;
+}
+
+function renderXweatherMap(box) {
   const x = data.xweather;
-  sub.textContent = 'Rayos nube-tierra de los últimos 15 minutos (red Vaisala), radar global completado con satélite y relieve. Anillos a 15, 40 y 100 km del cerro.';
   if (!x?.configured) {
     box.replaceChildren(
       h(
@@ -753,16 +794,9 @@ function renderXweatherMap(box, sub) {
   stage.append(overlay);
   box.replaceChildren(stage, h('p', { class: 'meta' }, `Mapa de las ${fmtTime(m.time)} (${ago(m.time)}). © Xweather / Vaisala.`));
   const img = stage.querySelector('img');
-  if (xwMap && xwMap.time === m.time) {
-    img.src = `data:image/jpeg;base64,${xwMap.jpeg}`;
-    return;
-  }
-  fetch(`${apiUrl()}?accion=mapa`, { cache: 'no-store' })
-    .then((r) => r.json())
-    .then((b) => {
-      if (!b.map) throw new Error('sin mapa');
-      xwMap = b.map;
-      img.src = `data:image/jpeg;base64,${b.map.jpeg}`;
+  loadXwMap(m.time)
+    .then((map) => {
+      img.src = `data:image/jpeg;base64,${map.jpeg}`;
     })
     .catch(() => box.append(h('p', { class: 'meta' }, 'No se pudo cargar la imagen del mapa.')));
 }
@@ -1125,7 +1159,7 @@ function render(d) {
   renderCharts(d);
   renderDmc(d);
   renderObs(d);
-  renderMaps();
+  renderMapViews();
   renderCompare(d);
   renderModels(d);
   renderHistory(d);
@@ -1315,7 +1349,7 @@ function activate(tab, { updateHash = true, focus = false } = {}) {
   for (const p of document.querySelectorAll('.tab-panel')) p.hidden = p.dataset.panel !== tab;
   store.set(KEYS.tab, tab);
   if (updateHash && location.hash.slice(1) !== tab) history.replaceState(null, '', `#${tab}`);
-  renderMaps();
+  renderMapViews();
 }
 
 $('.tabbar').addEventListener('click', (e) => {

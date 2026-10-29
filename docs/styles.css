@@ -567,6 +567,11 @@ td .line-key { margin-right: 8px; }
 .map-layers { gap: 6px; }
 .xw-stage { position: relative; width: 100%; max-width: 960px; border-radius: var(--radius); overflow: hidden; background: #1a1a19; border: 1px solid var(--border); }
 .xw-stage img { display: block; width: 100%; height: 100%; }
+.map-box .meta { color: var(--ink-2); font-size: 13px; margin: 0; }
+.storm-maps { gap: 20px; }
+.storm-maps .table-title { margin-top: 0; }
+/* En el Resumen, Windy toma la misma proporción que el mapa de Xweather (4:3) */
+.storm-maps .map-box iframe { height: auto; aspect-ratio: 4 / 3; min-height: 320px; }
 .rayos-overlay .ring-label.big { font-size: 15px; stroke-width: 3px; }
 .realtime { margin: 2px 0; padding: 6px 10px; border-radius: 8px; background: var(--surface-2); font-size: 14px; }
 .src-list li.disabled { opacity: 0.75; }

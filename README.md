@@ -21,7 +21,7 @@ Google Apps Script (cada 10 min)                       GitHub Pages
 
 | Pestaña | Qué muestra |
 |---|---|
-| **Resumen** | Estado de la tormenta eléctrica, alerta temprana, rayos por satélite y lo observado ahora |
+| **Resumen** | Estado de la tormenta eléctrica, alerta temprana, rayos por satélite, mapas de tormenta (Xweather y Windy) y lo observado ahora |
 | **Peligros** | Estado general y cada peligro (tormenta, lluvia, viento, nieve, calor, helada y radiación UV) |
 | **Próximas 72 horas** | Gráficos de tormenta, lluvia y ráfagas |
 | **Comparación y DMC** | Qué pronostica cada fuente y los avisos oficiales de la DMC |
