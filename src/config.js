@@ -67,6 +67,24 @@ export const GLM = {
   frames: 6,
 };
 
+// Xweather (Vaisala): rayos en tiempo real, pronóstico horario y mapa de tormentas.
+// Se activa con XWEATHER_ID y XWEATHER_SECRET en las propiedades del proyecto.
+export const XWEATHER = {
+  pageUrl: 'https://www.xweather.com',
+  radiusKm: 100, // máximo del plan estándar
+  lightningCost: 10, // accesos que cuesta cada consulta de rayos
+  lightningMaxAgeMinutes: 20, // una consulta más antigua ya no cuenta como "ahora"
+  // Los rayos se consultan solo con riesgo de tormenta en estas próximas horas
+  stormLookaheadHours: 12,
+  forecastMinutes: 120,
+  mapMinutes: { storm: 20, calm: 180 },
+  monthlyLimit: 14000, // del plan gratuito (15 000), con margen; se cambia con XWEATHER_LIMITE_MENSUAL
+  map: { layers: 'terrain,radar-global:60,lightning-strikes-15m-icons,admin-cities', width: 800, height: 600, zoom: 8 },
+};
+
+// Mapa de Windy (se muestra en el panel; no usa clave).
+export const WINDY_EMBED = 'https://embed.windy.com/embed.html';
+
 // Mapa de avisos de Meteored. Sus avisos para Chile son los de la DMC; el panel
 // muestra la página tal cual, sin copiar sus datos.
 export const METEORED_URL = 'https://www.meteored.cl/avisos-meteorologicos/';

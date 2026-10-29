@@ -14,7 +14,7 @@ const KEYS = {
   tab: 'alerta-sc-pestana',
 };
 // Color fijo por fuente (sigue a la fuente, nunca a su posición): --cat-1…7 en styles.css
-const SOURCE_ORDER = ['ecmwf_ifs', 'gfs_seamless', 'icon_seamless', 'gem_seamless', 'ukmo_seamless', 'meteofrance_seamless', 'metno'];
+const SOURCE_ORDER = ['ecmwf_ifs', 'gfs_seamless', 'icon_seamless', 'gem_seamless', 'ukmo_seamless', 'meteofrance_seamless', 'metno', 'xweather'];
 const sourceColor = (id) => `var(--cat-${SOURCE_ORDER.indexOf(id) + 1 || 8})`;
 // Colores de la paleta de la DMC en sus imágenes de rayos (antigüedad del rayo)
 const GLM_LEGEND = [
@@ -123,6 +123,7 @@ const fmtShort = (ms) =>
     .replace(/\./g, '');
 const fmtTime = (ms) => dateFmt({ hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(ms));
 const fmtRange = (a, b) => (!a ? '' : b && b > a ? `${fmtShort(a)} → ${fmtShort(b)}` : `desde ${fmtShort(a)}`);
+const pct = (k, n) => (n ? Math.round((k / n) * 100) : 0);
 const fmtNum = (v, digits = 1) => (v == null ? '–' : Number(v).toLocaleString('es-CL', { maximumFractionDigits: digits }));
 
 function ago(ms) {
@@ -293,6 +294,21 @@ function renderHazards(d) {
   );
 }
 
+/** Rayos en tiempo real de Xweather (últimos 5 minutos), si está configurado. */
+function realtimeLightning(d) {
+  const x = d.xweather;
+  if (!x?.configured) return null;
+  const l = x.lightning;
+  let text;
+  if (!l) text = x.risk ? 'Tiempo real (Xweather): sin datos en esta revisión.' : 'Tiempo real (Xweather): en espera, sin señales de tormenta. Se activa solo cuando hay riesgo.';
+  else if (!l.strikes.length) text = `Tiempo real (Xweather, ${fmtTime(l.time)}): sin rayos a menos de 100 km en los últimos 5 minutos.`;
+  else {
+    const c = l.strikes[0];
+    text = `Tiempo real (Xweather, ${fmtTime(l.time)}): ${l.total} rayo${l.total === 1 ? '' : 's'} en los últimos 5 minutos; el más cercano a ${fmtNum(c.distKm)} km al ${c.direction}.`;
+  }
+  return h('p', { class: 'realtime' }, text);
+}
+
 // --- Rayos por satélite -----------------------------------------------------
 
 let frameIndex = -1;
@@ -304,7 +320,10 @@ function renderRayos(d) {
   const g = d.glm;
   const link = h('a', { href: g?.pageUrl ?? 'https://climatologia.meteochile.gob.cl/application/diarioe/imagenesTormenta/', target: '_blank', rel: 'noopener' }, 'Ver todas las imágenes en la DMC');
   if (!g) {
-    box.replaceChildren(h('p', { class: 'empty-state' }, 'No se pudo obtener la imagen de rayos en la última revisión. ', link));
+    // Sin imagen satelital igual se muestran los rayos en tiempo real (Xweather)
+    box.replaceChildren(
+      h('div', { class: 'card-list' }, realtimeLightning(d), h('p', { class: 'empty-state' }, 'No se pudo obtener la imagen satelital de rayos en la última revisión. ', link)),
+    );
     return;
   }
   const stale = Date.now() - g.time > g.maxAgeMinutes * 60000;
@@ -373,7 +392,8 @@ function renderRayos(d) {
         'div',
         { class: 'rayos-info card' },
         h('div', { class: 'card-head' }, h('h3', {}, 'Rayos cerca del cerro'), chip(level)),
-        h('p', { class: 'meta' }, `Imagen de las ${fmtTime(g.time)} (${ago(g.time)})${stale ? ' · imagen antigua: no cuenta para la alerta' : ''}`),
+        realtimeLightning(d),
+        h('p', { class: 'meta' }, `Satélite: imagen de las ${fmtTime(g.time)} (${ago(g.time)})${stale ? ' · imagen antigua: no cuenta para la alerta' : ''}`),
         clusters,
         h(
           'p',
@@ -470,26 +490,26 @@ function renderCharts(d) {
 
   const alertaK = Math.max(3, Math.ceil(nSrc * T.thunderAlertaShare));
   chartCard('#chart-thunder', {
-    title: 'Fuentes que pronostican tormenta eléctrica',
-    sub: `Cuántas de las ${nSrc} fuentes indican tormenta en cada hora.`,
+    title: 'Fuentes que pronostican tormenta eléctrica (%)',
+    sub: `Porcentaje de las fuentes de pronóstico que indican tormenta en cada hora.`,
     kind: 'bars',
-    values: tl.map((x) => x.thunderK),
-    yMax: Math.max(nSrc, alertaK, 1),
-    ticks: [...new Set([0, Math.round(nSrc / 2), nSrc])],
+    values: tl.map((x) => pct(x.thunderK, x.thunderN)),
+    yMax: 100,
+    ticks: [0, 50, 100],
     thresholds: [
-      { value: T.thunderAviso, label: 'Aviso' },
-      { value: alertaK, label: 'Alerta' },
+      { value: pct(T.thunderAviso, nSrc), label: 'Aviso' },
+      { value: pct(alertaK, nSrc), label: 'Alerta' },
     ],
-    format: (v) => String(v),
-    peakLabel: (v) => `${v} de ${nSrc}`,
+    format: (v) => `${v} %`,
+    peakLabel: (v) => `${v} %`,
     emptyText: 'Ninguna fuente pronostica tormenta',
     tooltip: (i) => [
-      { key: true, value: `${tl[i].thunderK} de ${tl[i].thunderN}`, label: 'fuentes con tormenta' },
+      { key: true, value: `${pct(tl[i].thunderK, tl[i].thunderN)} %`, label: 'de las fuentes con tormenta' },
       { value: tl[i].capeMed != null ? `${tl[i].capeMed} J/kg` : '–', label: 'CAPE (inestabilidad)' },
     ],
     table: {
-      columns: ['Hora', 'Fuentes con tormenta', 'CAPE mediana (J/kg)', 'CAPE máx. (J/kg)'],
-      row: (x) => [fmtShort(x.t), `${x.thunderK} de ${x.thunderN}`, x.capeMed ?? '–', x.capeMax ?? '–'],
+      columns: ['Hora', 'Fuentes con tormenta (%)', 'CAPE mediana (J/kg)', 'CAPE máx. (J/kg)'],
+      row: (x) => [fmtShort(x.t), `${pct(x.thunderK, x.thunderN)} %`, x.capeMed ?? '–', x.capeMax ?? '–'],
     },
   });
 
@@ -630,15 +650,121 @@ function renderObs(d) {
   );
 }
 
-/** El mapa de Meteored se carga al abrir su pestaña (y una sola vez). */
-function renderMeteored() {
-  const box = $('#meteored');
-  if (box.querySelector('iframe') || currentTab !== 'mapa') return;
-  const url = data?.meteoredUrl || 'https://www.meteored.cl/avisos-meteorologicos/';
-  box.replaceChildren(
-    h('iframe', { src: url, title: 'Mapa de avisos meteorológicos de Meteored', referrerpolicy: 'strict-origin-when-cross-origin' }),
-    h('p', { class: 'meta' }, 'Contenido de Meteored (incluye su publicidad). ', h('a', { href: url, target: '_blank', rel: 'noopener' }, 'Abrir en una ventana aparte')),
+// --- Mapas: tormentas de Xweather, Windy y avisos de Meteored -------------------
+
+const MAPS = {
+  xweather: { tab: 'Tormentas · Xweather' },
+  windy: { tab: 'Windy' },
+  meteored: { tab: 'Avisos · Meteored' },
+};
+const WINDY_LAYERS = { thunder: 'Tormentas eléctricas', gust: 'Ráfagas', rain: 'Lluvia' };
+let mapChoice = MAPS[store.get('alerta-sc-mapa')] ? store.get('alerta-sc-mapa') : 'xweather';
+let windyLayer = WINDY_LAYERS[store.get('alerta-sc-windy')] ? store.get('alerta-sc-windy') : 'thunder';
+let mapShown = null; // evita recargar el mismo mapa en cada actualización
+let xwMap = null;
+
+/** Los mapas se cargan al abrir la pestaña Mapas. */
+function renderMaps() {
+  if (currentTab !== 'mapa' || !data) return;
+  const key = `${mapChoice}:${windyLayer}:${mapChoice === 'xweather' ? data.xweather?.map?.time : ''}`;
+  $('#map-switch').replaceChildren(
+    ...Object.entries(MAPS).map(([id, m]) => {
+      const b = h('button', { type: 'button', role: 'tab', class: 'tab', 'aria-selected': String(id === mapChoice) }, m.tab);
+      b.addEventListener('click', () => {
+        mapChoice = id;
+        store.set('alerta-sc-mapa', id);
+        renderMaps();
+      });
+      return b;
+    }),
   );
+  if (mapShown === key) return;
+  mapShown = key;
+  const box = $('#map-box');
+  const sub = $('#map-sub');
+  if (mapChoice === 'windy') {
+    sub.textContent = 'Mapa interactivo de Windy centrado en el cerro. Dentro del mapa se puede cambiar el modelo (ECMWF, GFS, ICON…) y avanzar en el tiempo.';
+    const p = data.location;
+    const params = new URLSearchParams({
+      type: 'map', location: 'coordinates', metricRain: 'mm', metricTemp: '°C', metricWind: 'm/s', zoom: '8',
+      overlay: windyLayer, product: 'ecmwf', level: 'surface', lat: p.lat, lon: p.lon, detailLat: p.lat, detailLon: p.lon, marker: 'true', message: 'true',
+    });
+    const layers = h(
+      'div',
+      { class: 'row map-layers' },
+      Object.entries(WINDY_LAYERS).map(([id, label]) => {
+        const b = h('button', { type: 'button', class: 'legend-item', 'aria-pressed': String(id === windyLayer) }, label);
+        b.addEventListener('click', () => {
+          windyLayer = id;
+          store.set('alerta-sc-windy', id);
+          renderMaps();
+        });
+        return b;
+      }),
+    );
+    box.replaceChildren(
+      layers,
+      h('iframe', { src: `${data.windyEmbed || 'https://embed.windy.com/embed.html'}?${params}`, title: 'Mapa de Windy', referrerpolicy: 'strict-origin-when-cross-origin' }),
+    );
+  } else if (mapChoice === 'meteored') {
+    sub.textContent = 'Mapa interactivo de Meteored con los avisos meteorológicos de todo Chile (los publica la DMC). Incluye su publicidad.';
+    const url = data.meteoredUrl || 'https://www.meteored.cl/avisos-meteorologicos/';
+    box.replaceChildren(
+      h('iframe', { src: url, title: 'Mapa de avisos meteorológicos de Meteored', referrerpolicy: 'strict-origin-when-cross-origin' }),
+      h('p', { class: 'meta' }, h('a', { href: url, target: '_blank', rel: 'noopener' }, 'Abrir Meteored en una ventana aparte')),
+    );
+  } else {
+    renderXweatherMap(box, sub);
+  }
+}
+
+function renderXweatherMap(box, sub) {
+  const x = data.xweather;
+  sub.textContent = 'Rayos nube-tierra de los últimos 15 minutos (red Vaisala), radar global completado con satélite y relieve. Anillos a 15, 40 y 100 km del cerro.';
+  if (!x?.configured) {
+    box.replaceChildren(
+      h(
+        'div',
+        { class: 'empty-state' },
+        h('p', {}, 'El mapa de tormentas de Xweather necesita una cuenta de Xweather.'),
+        h('p', { class: 'meta' }, 'Crea la cuenta en xweather.com, copia el ID y el secreto de la aplicación, y agrégalos en Apps Script como propiedades XWEATHER_ID y XWEATHER_SECRET. '),
+        h('a', { href: 'https://signup.xweather.com', target: '_blank', rel: 'noopener' }, 'Crear cuenta en Xweather'),
+      ),
+    );
+    return;
+  }
+  if (!x.map) {
+    box.replaceChildren(h('p', { class: 'empty-state' }, 'El primer mapa aparecerá en la próxima revisión del servidor (cada 10 minutos).'));
+    return;
+  }
+  const m = x.map;
+  const stage = h('div', { class: 'xw-stage', style: `aspect-ratio:${m.width} / ${m.height}` }, h('img', { alt: 'Mapa de tormentas de Xweather centrado en el cerro' }));
+  const overlay = svg('svg', { viewBox: `0 0 ${m.width} ${m.height}`, class: 'rayos-overlay', 'aria-hidden': 'true' });
+  (x.radiiKm || data.glm?.radiiKm || [100, 40, 15]).forEach((km, i) => {
+    const r = (km * 1000) / m.mPerPx;
+    overlay.append(svg('circle', { cx: m.width / 2, cy: m.height / 2, r, class: `ring lvl-${i + 1}` }));
+    if (r > 30) {
+      const t = svg('text', { x: m.width / 2, y: m.height / 2 - r - 4, class: 'ring-label big', 'text-anchor': 'middle' });
+      t.textContent = `${km} km`;
+      overlay.append(t);
+    }
+  });
+  overlay.append(svg('circle', { cx: m.width / 2, cy: m.height / 2, r: 4, class: 'cerro-dot' }));
+  stage.append(overlay);
+  box.replaceChildren(stage, h('p', { class: 'meta' }, `Mapa de las ${fmtTime(m.time)} (${ago(m.time)}). © Xweather / Vaisala.`));
+  const img = stage.querySelector('img');
+  if (xwMap && xwMap.time === m.time) {
+    img.src = `data:image/jpeg;base64,${xwMap.jpeg}`;
+    return;
+  }
+  fetch(`${apiUrl()}?accion=mapa`, { cache: 'no-store' })
+    .then((r) => r.json())
+    .then((b) => {
+      if (!b.map) throw new Error('sin mapa');
+      xwMap = b.map;
+      img.src = `data:image/jpeg;base64,${b.map.jpeg}`;
+    })
+    .catch(() => box.append(h('p', { class: 'meta' }, 'No se pudo cargar la imagen del mapa.')));
 }
 
 // --- Comparación de fuentes ---------------------------------------------------
@@ -817,7 +943,7 @@ function renderThunderLanes(d, box, chartBox) {
       const on = lanes.filter((l) => l.values[i] === 1);
       const models = d.series.filter((s) => s.thunder[i] === 1).length;
       return [
-        { value: `${models} de ${d.series.length}`, label: 'modelos con tormenta' },
+        { value: `${pct(models, d.series.length)} %`, label: 'de los modelos con tormenta' },
         ...(on.length
           ? on.map((l) => ({ key: true, color: l.level != null ? `var(--${['good', 'warning', 'serious', 'critical'][l.level]})` : l.color, value: l.name, label: 'tormenta' }))
           : [{ value: 'Ninguna fuente', label: 'indica tormenta' }]),
@@ -888,8 +1014,8 @@ function renderSources(d) {
   const rows = d.sources.map((s) =>
     h(
       'li',
-      {},
-      levelMark(s.ok ? 0 : s.stale ? 1 : 3),
+      { class: s.disabled ? 'disabled' : null },
+      s.disabled ? h('span', { class: 'hz-icon', title: 'Sin configurar' }, icon('otro', 18)) : levelMark(s.ok ? 0 : s.stale ? 1 : 3),
       h(
         'div',
         {},
@@ -904,6 +1030,17 @@ function renderSources(d) {
       ),
     ),
   );
+  const xu = d.xweather?.configured ? d.xweather.usage : null;
+  if (xu) {
+    rows.push(
+      h(
+        'li',
+        {},
+        levelMark(xu.used >= xu.limit ? 3 : xu.used > xu.limit * 0.8 ? 1 : 0),
+        h('div', {}, 'Accesos de Xweather este mes', h('span', { class: 'meta' }, `${xu.used.toLocaleString('es-CL')} de ${xu.limit.toLocaleString('es-CL')} (cada consulta de rayos usa 10)`)),
+      ),
+    );
+  }
   const e = d.email;
   const schedule = e.schedule ? `Boletín a las ${e.schedule.join(', ').replace(/, ([^,]*)$/, ' y $1')}.` : '';
   const next = e.next ? ` Próximo: ${fmtShort(e.next)}${e.pending ? ` (${e.pending} cambio${e.pending === 1 ? '' : 's'} por informar)` : ''}.` : '';
@@ -988,7 +1125,7 @@ function render(d) {
   renderCharts(d);
   renderDmc(d);
   renderObs(d);
-  renderMeteored();
+  renderMaps();
   renderCompare(d);
   renderModels(d);
   renderHistory(d);
@@ -1178,7 +1315,7 @@ function activate(tab, { updateHash = true, focus = false } = {}) {
   for (const p of document.querySelectorAll('.tab-panel')) p.hidden = p.dataset.panel !== tab;
   store.set(KEYS.tab, tab);
   if (updateHash && location.hash.slice(1) !== tab) history.replaceState(null, '', `#${tab}`);
-  renderMeteored();
+  renderMaps();
 }
 
 $('.tabbar').addEventListener('click', (e) => {

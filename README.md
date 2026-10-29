@@ -25,7 +25,7 @@ Google Apps Script (cada 10 min)                       GitHub Pages
 | **Peligros** | Estado general y cada peligro (tormenta, lluvia, viento, nieve, calor, helada y radiación UV) |
 | **Próximas 72 horas** | Gráficos de tormenta, lluvia y ráfagas |
 | **Comparación y DMC** | Qué pronostica cada fuente y los avisos oficiales de la DMC |
-| **Mapa Meteored** | Mapa interactivo de avisos de todo Chile |
+| **Mapas** | Mapa de tormentas de Xweather (rayos de 15 min y radar), Windy y avisos de Meteored |
 | **Historial y fuentes** | Cambios registrados y estado de cada fuente y del correo |
 
 El estado general se ve siempre en la barra superior; al tocarlo se abre *Peligros*. Cada
@@ -56,6 +56,8 @@ En el teléfono: abre la dirección del panel y elige **Instalar app** (Android)
 | TAF de Pudahuel | Pronóstico aeronáutico de tormentas y ráfagas (24 h) | Pronóstico |
 | [Open-Meteo](https://open-meteo.com): ECMWF, GFS, ICON, GEM, UKMO, ARPEGE | 6 modelos: tormenta, CAPE, lluvia, ráfagas, nieve, temperatura | Pronóstico |
 | [MET Norway](https://api.met.no) | Un séptimo pronóstico | Pronóstico |
+| [Xweather](https://www.xweather.com) (Vaisala), con clave | **Rayos de los últimos 5 minutos** a menos de 100 km, un pronóstico horario y el mapa de tormentas | Observado y pronóstico |
+| [Windy](https://www.windy.com) | Mapa interactivo (tormentas, ráfagas y lluvia) en la pestaña *Mapas* | Visual |
 | [Meteored · Mapa de avisos](https://www.meteored.cl/avisos-meteorologicos/) | Mapa interactivo de avisos de todo Chile, integrado en el panel | Visual |
 
 ### Alerta temprana
@@ -66,6 +68,18 @@ una tormenta eléctrica en el cerro mañana a las 15:00, según ICON (15:00). La
 de tormentas eléctricas hasta el miércoles 21 a las 00:00."* Si ya se observan rayos o tormenta en
 las estaciones, aparece primero como **en curso**. La confianza es *alta* cuando coincide la mitad o
 más de las fuentes (o hay respaldo oficial), *media* con 2 fuentes y *baja* con una sola.
+
+### Fuentes que no se pueden usar directamente
+
+- **The Weather Channel** (The Weather Company, IBM): su API requiere una licencia comercial y su
+  sitio no permite mostrarse dentro de otra página. Si la empresa obtiene una clave, se puede
+  agregar como fuente.
+- **Windy como fuente de datos**: su API de pronóstico no incluye ECMWF y para Chile solo entrega
+  GFS, que el sistema ya usa; además cuesta 990 € al año (la clave de prueba entrega datos
+  alterados). Por eso Windy se integra como mapa, que muestra ECMWF, GFS e ICON.
+
+La coincidencia entre fuentes se expresa en **porcentaje** (por ejemplo, "según el 63 % de las
+fuentes").
 
 ### Comparación de fuentes
 
@@ -97,14 +111,14 @@ toma el nivel más alto entre sus señales, y el panel muestra el porqué (*Señ
 
 | Señal | Nivel |
 |---|---|
-| Rayos por satélite a menos de 15 km del cerro | Alarma |
+| Rayos a menos de 15 km del cerro (Xweather en tiempo real o satélite) | Alarma |
 | Tormenta observada en Tobalaba (METAR "TS", a menos de 12 km del punto) | Alarma |
-| Rayos por satélite a menos de 40 km | Alerta |
+| Rayos a menos de 40 km (Xweather o satélite) | Alerta |
 | Tormenta en Pudahuel, en las cercanías ("VCTS") o prevista en 2 h | Alerta |
 | Cumulonimbus sobre Tobalaba | Alerta |
 | La mitad o más de las fuentes pronostican tormenta en una misma hora (mínimo 3) | Alerta |
 | TAF con tormenta | Alerta (Aviso si es solo "PROB30") |
-| Rayos por satélite a menos de 100 km | Aviso |
+| Rayos a menos de 100 km (Xweather o satélite) | Aviso |
 | Hubo tormenta en una estación en la última hora, o cumulonimbus sobre Pudahuel | Aviso |
 | 2 fuentes pronostican tormenta en una misma hora | Aviso |
 | Atmósfera muy inestable (CAPE ≥ 1000 J/kg) con lluvia | Aviso |

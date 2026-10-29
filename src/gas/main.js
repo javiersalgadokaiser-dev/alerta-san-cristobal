@@ -64,7 +64,7 @@ function cacheStore() {
 function kv() {
   const props = propsStore();
   const cache = cacheStore();
-  const pick = (key) => (key === 'glm-frames' ? cache : props);
+  const pick = (key) => (key === 'glm-frames' || key === 'xw-map' ? cache : props);
   return { get: (key) => pick(key).get(key), put: (key, value) => pick(key).put(key, value) };
 }
 
@@ -107,6 +107,12 @@ function settings() {
     contact: setting('URL_PANEL') || PANEL_URL,
     // Clave del plan pagado de Open-Meteo (opcional; necesaria para uso comercial)
     openMeteoKey: setting('OPENMETEO_APIKEY'),
+    // Xweather: https://signup.xweather.com (plan gratis solo para uso no comercial)
+    xweather: {
+      id: setting('XWEATHER_ID'),
+      secret: setting('XWEATHER_SECRET'),
+      limit: Number(setting('XWEATHER_LIMITE_MENSUAL')) || undefined,
+    },
   };
 }
 
@@ -194,19 +200,24 @@ export function verEstado() {
   console.log(`Estado: ${s.overall.levelName} · ${s.overall.headline}`);
   console.log(mailer.paused ? 'Correos: EN PAUSA (ejecuta reanudarCorreos para activarlos)' : `Correos: activos, a ${recipients().join(', ')}`);
   for (const h of s.hazards) console.log(`  ${h.name}: ${h.levelName}`);
-  for (const src of s.sources) console.log(`  [${src.ok ? 'OK' : 'FALLA'}] ${src.name}${src.ok ? '' : `: ${src.error}`}`);
+  for (const src of s.sources) console.log(`  [${src.ok ? 'OK' : src.disabled ? 'SIN CONFIGURAR' : 'FALLA'}] ${src.name}${src.ok ? '' : `: ${src.error}`}`);
+  if (s.xweather && s.xweather.configured) {
+    console.log(`Xweather: ${s.xweather.usage.used} de ${s.xweather.usage.limit} accesos este mes${s.xweather.risk ? ` · rayos activos por ${s.xweather.risk}` : ' · rayos en espera (sin riesgo de tormenta)'}`);
+  }
   const err = setting('ULTIMO_ERROR');
   if (err) console.log(`Último error: ${err}`);
 }
 
 // --- Aplicación web: la consulta el panel -------------------------------------
 
-/** GET ?accion=estado (por defecto) o ?accion=rayos */
+/** GET ?accion=estado (por defecto), ?accion=rayos (imágenes GLM) o ?accion=mapa (Xweather) */
 export function doGet(e) {
   const accion = (e && e.parameter && e.parameter.accion) || 'estado';
   let body;
   if (accion === 'rayos') {
     body = { frames: kv().get('glm-frames') || [] };
+  } else if (accion === 'mapa') {
+    body = { map: kv().get('xw-map') };
   } else {
     body = kv().get('status') || { pendiente: true, mensaje: 'Aún no hay una primera revisión. En Apps Script, ejecuta instalar().' };
     const err = setting('ULTIMO_ERROR');

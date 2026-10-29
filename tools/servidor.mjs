@@ -26,7 +26,8 @@ http
     const url = new URL(req.url, 'http://localhost');
     try {
       if (url.pathname === '/api-prueba' && DATOS) {
-        const file = url.searchParams.get('accion') === 'rayos' ? 'rayos.json' : 'estado.json';
+        const accion = url.searchParams.get('accion');
+        const file = accion === 'rayos' ? 'rayos.json' : accion === 'mapa' ? 'mapa.json' : 'estado.json';
         res.writeHead(200, { 'Content-Type': TYPES['.json'], 'Cache-Control': 'no-store' });
         return res.end(await readFile(join(DATOS, file)));
       }

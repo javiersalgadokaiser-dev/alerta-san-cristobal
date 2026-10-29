@@ -40,7 +40,7 @@
       <button type="button" role="tab" id="tab-peligros" data-tab="peligros" aria-controls="panel-peligros">Peligros</button>
       <button type="button" role="tab" id="tab-pronostico" data-tab="pronostico" aria-controls="panel-pronostico">Próximas 72 horas</button>
       <button type="button" role="tab" id="tab-comparacion" data-tab="comparacion" aria-controls="panel-comparacion">Comparación y DMC</button>
-      <button type="button" role="tab" id="tab-mapa" data-tab="mapa" aria-controls="panel-mapa">Mapa Meteored</button>
+      <button type="button" role="tab" id="tab-mapa" data-tab="mapa" aria-controls="panel-mapa">Mapas</button>
       <button type="button" role="tab" id="tab-historial" data-tab="historial" aria-controls="panel-historial">Historial y fuentes</button>
     </nav>
   </header>
@@ -103,12 +103,13 @@
       </section>
     </div>
 
-    <!-- 5. Mapa de Meteored -->
+    <!-- 5. Mapas: tormentas de Xweather, Windy y avisos de Meteored -->
     <div class="tab-panel" id="panel-mapa" role="tabpanel" aria-labelledby="tab-mapa" data-panel="mapa" hidden>
-      <section aria-labelledby="h-meteored">
-        <h2 id="h-meteored">Mapa de avisos · Meteored</h2>
-        <p class="section-sub">Mapa interactivo de Meteored con los avisos meteorológicos de todo Chile (los publica la DMC).</p>
-        <div id="meteored" class="meteored"></div>
+      <section aria-labelledby="h-mapas">
+        <h2 id="h-mapas">Mapas</h2>
+        <div id="map-switch" class="tabs" role="tablist" aria-label="Mapa"></div>
+        <p id="map-sub" class="section-sub map-sub"></p>
+        <div id="map-box" class="map-box"></div>
       </section>
     </div>
 
@@ -163,7 +164,7 @@
       <a href="https://open-meteo.com" rel="noopener">Open-Meteo</a> (CC BY 4.0),
       <a href="https://api.met.no" rel="noopener">MET Norway</a> (CC BY 4.0),
       <a href="https://aviationweather.gov" rel="noopener">NOAA Aviation Weather Center</a> y
-      <a href="https://www.meteored.cl" rel="noopener">Meteored</a>.</p>
+      <a href="https://www.meteored.cl" rel="noopener">Meteored</a>, <a href="https://www.windy.com" rel="noopener">Windy</a> y <a href="https://www.xweather.com" rel="noopener">Xweather</a>.</p>
     <p>Herramienta complementaria. Ante una emergencia, sigue las indicaciones de
       <a href="https://senapred.cl" rel="noopener">SENAPRED</a> y de la DMC.</p>
   </footer>

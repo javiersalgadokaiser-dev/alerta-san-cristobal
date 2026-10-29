@@ -37,6 +37,11 @@ let openMeteoFailures = Number(process.env.FALLAS_OPENMETEO) || 0;
 const UrlFetchApp = {
   fetch(url, params = {}) {
     stats.fetches++;
+    // XWEATHER_MOCK=1: respuestas de ejemplo de Xweather (sin cuenta real)
+    if (process.env.XWEATHER_MOCK && url.includes('xweather.com')) {
+      stats.xweather = (stats.xweather || 0) + 1;
+      return xweatherMock(url);
+    }
     if (openMeteoFailures > 0 && url.includes('open-meteo.com')) {
       openMeteoFailures--;
       stats.rejected = (stats.rejected || 0) + 1;
@@ -77,6 +82,28 @@ const UrlFetchApp = {
     };
   },
 };
+
+function xweatherMock(url) {
+  const json = (o) => ({ getResponseCode: () => 200, getAllHeaders: () => ({ 'Content-Type': 'application/json' }), getContentText: () => JSON.stringify(o), getContent: () => [] });
+  const now = Date.now();
+  if (url.includes('/lightning/')) {
+    const strike = (km, bearing) => ({ ob: { timestamp: Math.floor(now / 1000) - 90, pulse: { type: 'cg' } }, relativeTo: { bearing, distanceKM: km } });
+    return json({ success: true, error: null, response: [strike(31.5, 80), strike(64, 120)] });
+  }
+  if (url.includes('/forecasts/')) {
+    const t0 = Math.floor(now / 3600000) * 3600;
+    const periods = Array.from({ length: 74 }, (_, h) => ({ timestamp: t0 + h * 3600, tempC: 15 + 5 * Math.sin(h / 4), precipMM: h > 20 && h < 30 ? 1 : 0, windSpeedMPS: 4, windGustMPS: 8 + (h % 12), uvi: 6, weatherPrimaryCoded: h === 3 ? 'S:L:T' : '::SC' }));
+    return json({ success: true, error: null, response: [{ periods }] });
+  }
+  // Mapa: cualquier JPEG a mano (XW_MAPA=archivo.jpg) o un recorte gris generado
+  let bytes;
+  try {
+    bytes = readFileSync(process.env.XW_MAPA);
+  } catch {
+    bytes = Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==', 'base64');
+  }
+  return { getResponseCode: () => 200, getAllHeaders: () => ({ 'Content-Type': 'image/jpeg' }), getContentText: () => '', getContent: () => Array.from(bytes, (b) => (b > 127 ? b - 256 : b)) };
+}
 
 function limitedMap(name, maxValue, maxTotal) {
   const m = new Map();
@@ -193,12 +220,19 @@ if (status.pendiente) {
 } else {
   console.log(`  doGet estado: ${status.overall.levelName} · ${status.hazards.length} peligros · ${Math.round(JSON.stringify(status).length / 1024)} KB`);
   for (const s of status.sources) console.log(`    ${s.ok ? 'OK   ' : s.stale ? 'VIEJO' : 'FALLA'} ${s.name} — ${s.ok ? s.detail : s.error}`);
+  if (status.xweather) {
+    const x = status.xweather;
+    console.log(`  Xweather: ${x.configured ? 'activo' : 'sin configurar'}${x.risk ? ` · riesgo: ${x.risk}` : ''} · accesos del mes ${x.usage.used}/${x.usage.limit}` +
+      (x.lightning ? ` · ${x.lightning.total} rayos, el más cercano a ${x.lightning.strikes[0]?.distKm} km` : ''));
+  }
   if (status.glm) {
     console.log(`  Rayos: imagen ${status.glm.file}, ${status.glm.clusters.length} núcleos a ≤ ${status.glm.radiiKm[0]} km` +
       (status.glm.clusters.length ? `; el más cercano a ${status.glm.clusters[0].distKm} km al ${status.glm.clusters[0].direction}` : ''));
   }
 }
 console.log(`  doGet rayos: ${rayos.frames.length} imagen(es), ${Math.round(JSON.stringify(rayos).length / 1024)} KB`);
+const mapa = JSON.parse(run("doGet({ parameter: { accion: 'mapa' } })").getContent());
+console.log(`  doGet mapa: ${mapa.map ? `${Math.round(mapa.map.jpeg.length / 1024)} KB en base64` : 'sin mapa'} · claves en caché: ${[...cache.m.keys()].join(', ') || 'ninguna'}`);
 console.log(`  Correos: ${sentEmails.map((e) => `«${e.subject}» → ${e.to}`).join(' | ') || 'ninguno'}`);
 console.log(`  PropertiesService: ${Math.round(props.total() / 1024)} KB de 500 KB · CacheService: ${Math.round(cache.total() / 1024)} KB`);
 
@@ -216,6 +250,7 @@ console.log(`  Asunto: «${sentEmails[sentEmails.length - 1].subject}»`);
 if (OUT) {
   writeFileSync(join(OUT, 'estado.json'), JSON.stringify(status, null, 1));
   writeFileSync(join(OUT, 'rayos.json'), JSON.stringify(rayos));
+  writeFileSync(join(OUT, 'mapa.json'), JSON.stringify(mapa));
   if (sentEmails[0]) writeFileSync(join(OUT, 'correo.html'), sentEmails[0].htmlBody);
   console.log(`\nArchivos en ${OUT}`);
 }

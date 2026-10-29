@@ -6,9 +6,10 @@ import { activeAlerts, dmcSignature, fetchDmc, parseDmc } from './sources/dmc.js
 import { loadGlm } from './sources/glm.js';
 import { fetchMetNo } from './sources/metno.js';
 import { fetchOpenMeteo } from './sources/openmeteo.js';
-import { HOUR } from './util.js';
+import { fetchXweatherForecast, fetchXweatherLightning, fetchXweatherMap, xweatherBudget } from './sources/xweather.js';
+import { HOUR, formatLocal } from './util.js';
 
-const { LOCATION, MODELS, DMC, GLM, STATIONS, HORIZON_HOURS, OPEN_METEO_CACHE_MINUTES, NOTIFY, CACHE_VERSION } = cfg;
+const { LOCATION, MODELS, DMC, GLM, XWEATHER, STATIONS, HORIZON_HOURS, OPEN_METEO_CACHE_MINUTES, NOTIFY, CACHE_VERSION } = cfg;
 const STALE_LIMIT = 6 * HOUR; // datos guardados que se aceptan si una fuente falla
 
 /**
@@ -19,7 +20,7 @@ const STALE_LIMIT = 6 * HOUR; // datos guardados que se aceptan si una fuente fa
  * No depende de la plataforma; recibe:
  *   kv:       { get(clave) → objeto | null, put(clave, objeto) }
  *   mailer:   { configured, send({ subject, html, text }) → { ok, skipped?, error? } }
- *   settings: { dashboardUrl, contact, dmcUrl, openMeteoKey }
+ *   settings: { dashboardUrl, contact, dmcUrl, openMeteoKey, xweather: { id, secret, limit } }
  */
 export async function runCheck({ kv, mailer, settings = {}, now = Date.now() }) {
   const state = (await kv.get('state')) || {};
@@ -35,21 +36,38 @@ export async function runCheck({ kv, mailer, settings = {}, now = Date.now() }) 
   let newFrame = null;
 
   // Ejecuta un cargador y registra su estado para el panel.
-  async function track(id, name, url, loader) {
+  // Si una fuente falla, se espera 10, 20, 40 y hasta 60 minutos antes de volver a
+  // consultarla: así una fuente caída no alarga cada revisión (Apps Script limita
+  // el tiempo diario) ni insiste sobre un servidor que rechaza las consultas.
+  state.backoff = state.backoff || {};
+  const fallback = (id, name, url, error, staleLimit) => {
+    const cached = state.cache[id];
+    if (cached && now - cached.fetchedAt < staleLimit) {
+      sources.push({ id, name, url, ok: false, stale: true, fetchedAt: cached.fetchedAt, error });
+      return cached.data;
+    }
+    sources.push({ id, name, url, ok: false, error });
+    return null;
+  };
+
+  async function track(id, name, url, loader, { staleLimit = STALE_LIMIT } = {}) {
+    const wait = state.backoff[id];
+    if (wait && now < wait.until) {
+      return fallback(id, name, url, `${wait.error} · se reintentará a las ${formatLocal(wait.until, LOCATION.timezone, { withDay: false })}`, staleLimit);
+    }
     try {
       const { data, meta } = await loader();
+      delete state.backoff[id];
       sources.push({ id, name, url, ok: true, ...meta });
       return data;
     } catch (e) {
-      const cached = state.cache[id];
-      if (cached && now - cached.fetchedAt < STALE_LIMIT) {
-        sources.push({ id, name, url, ok: false, stale: true, fetchedAt: cached.fetchedAt, error: errorText(e) });
-        return cached.data;
-      }
-      sources.push({ id, name, url, ok: false, error: errorText(e) });
-      return null;
+      const failures = (wait ? wait.failures : 0) + 1;
+      state.backoff[id] = { failures, until: now + Math.min(60, 10 * 2 ** (failures - 1)) * 60000 - 60000, error: errorText(e) };
+      return fallback(id, name, url, errorText(e), staleLimit);
     }
   }
+  // Un pronóstico de hasta 12 h sigue siendo útil (los modelos se actualizan cada 6 h)
+  const FORECAST_STALE = 12 * HOUR;
 
   const fresh = (id, data, detail) => {
     state.cache[id] = { fetchedAt: now, data };
@@ -62,7 +80,7 @@ export async function runCheck({ kv, mailer, settings = {}, now = Date.now() }) 
     if (c && now - c.fetchedAt < OPEN_METEO_CACHE_MINUTES * 60000) return reuse('openmeteo', `${c.data.length} modelos`);
     const data = await fetchOpenMeteo(LOCATION, MODELS, HORIZON_HOURS + 2, { apiKey: settings.openMeteoKey });
     return fresh('openmeteo', data, `${data.length} modelos`);
-  });
+  }, { staleLimit: FORECAST_STALE });
 
   const metno = await track('metno', 'MET Norway', 'https://api.met.no', async () => {
     const c = state.cache.metno;
@@ -75,7 +93,7 @@ export async function runCheck({ kv, mailer, settings = {}, now = Date.now() }) 
     const out = fresh('metno', trimSeries(r.series, now - HOUR, now + (HORIZON_HOURS + 6) * HOUR), 'pronóstico horario');
     Object.assign(state.cache.metno, { expires: r.expires, lastModified: r.lastModified });
     return out;
-  });
+  }, { staleLimit: FORECAST_STALE });
 
   const metars = await track('metar', 'METAR Tobalaba y Pudahuel', 'https://aviationweather.gov', async () => {
     const data = await fetchMetars(STATIONS.metar, LOCATION);
@@ -107,7 +125,67 @@ export async function runCheck({ kv, mailer, settings = {}, now = Date.now() }) 
   });
 
   const dmc = dmcParsed ? { ...dmcParsed, sig: undefined, alerts: activeAlerts(dmcParsed.alerts, now) } : null;
-  const forecasts = [...(models || []), ...(metno ? [metno] : [])];
+
+  // --- Xweather (solo si hay clave) ---------------------------------------------
+  const xw = settings.xweather;
+  const xwOn = !!(xw && xw.id && xw.secret);
+  state.xweather = state.xweather || {};
+  const budget = xweatherBudget(state.xweather, now, (xw && xw.limit) || XWEATHER.monthlyLimit);
+  const spend = (cost) => {
+    if (!budget.can(cost)) throw new Error('Se alcanzó el límite mensual de accesos de Xweather');
+    budget.spend(cost);
+  };
+  let xwForecast = null;
+  let xlightning = null;
+  let newMap = null;
+  let risk = null;
+  if (xwOn) {
+    xwForecast = await track('xweather-pronostico', 'Xweather · pronóstico horario', XWEATHER.pageUrl, async () => {
+      const c = state.cache['xweather-pronostico'];
+      if (c && now - c.fetchedAt < XWEATHER.forecastMinutes * 60000) return reuse('xweather-pronostico', 'pronóstico horario');
+      spend(1);
+      return fresh('xweather-pronostico', await fetchXweatherForecast(LOCATION, xw, HORIZON_HOURS + 2), 'pronóstico horario');
+    }, { staleLimit: FORECAST_STALE });
+
+    // Los rayos cuestan 10 accesos: se consultan solo cuando hay riesgo de tormenta.
+    risk = stormRisk({
+      now,
+      forecasts: [...(models || []), metno, xwForecast],
+      glm,
+      metars: metars || [],
+      dmcAlerts: dmc ? dmc.alerts : [],
+      lastStrikeAt: state.xweather.lastStrikeAt,
+      hours: XWEATHER.stormLookaheadHours,
+    });
+    xlightning = await track('xweather-rayos', 'Xweather · rayos en tiempo real', XWEATHER.pageUrl, async () => {
+      if (!risk) return { data: null, meta: { fetchedAt: now, detail: 'sin riesgo de tormenta: en espera (se activa con cualquier señal)' } };
+      spend(XWEATHER.lightningCost);
+      const strikes = await fetchXweatherLightning(LOCATION, xw, XWEATHER.radiusKm);
+      if (strikes.length) state.xweather.lastStrikeAt = now;
+      const detail = strikes.length ? `${strikes.length} rayos en 5 min a menos de ${XWEATHER.radiusKm} km` : 'sin rayos en los últimos 5 minutos';
+      return fresh('xweather-rayos', { time: now, total: strikes.length, strikes: strikes.slice(0, 30) }, `${detail} · activo por ${risk}`);
+    });
+
+    await track('xweather-mapa', 'Xweather · mapa de tormentas', XWEATHER.pageUrl, async () => {
+      const c = state.cache['xweather-mapa'];
+      const every = (risk ? XWEATHER.mapMinutes.storm : XWEATHER.mapMinutes.calm) * 60000;
+      if (c && now - c.fetchedAt < every) return reuse('xweather-mapa', 'mapa');
+      spend(1);
+      newMap = { time: now, jpeg: await fetchXweatherMap(LOCATION, xw, XWEATHER.map) };
+      return fresh('xweather-mapa', { time: now }, 'mapa actualizado');
+    });
+  } else {
+    sources.push({
+      id: 'xweather',
+      name: 'Xweather · rayos, pronóstico y mapa',
+      url: XWEATHER.pageUrl,
+      ok: false,
+      disabled: true,
+      error: 'Sin configurar: agrega XWEATHER_ID y XWEATHER_SECRET en las propiedades del proyecto de Apps Script',
+    });
+  }
+
+  const forecasts = [...(models || []), ...(metno ? [metno] : []), ...(xwForecast ? [xwForecast] : [])];
   const result = evaluate({
     now,
     forecasts,
@@ -115,6 +193,7 @@ export async function runCheck({ kv, mailer, settings = {}, now = Date.now() }) 
     tafs: tafs || [],
     dmcAlerts: dmc ? dmc.alerts : [],
     glm,
+    xlightning,
     cfg,
   });
 
@@ -159,6 +238,8 @@ export async function runCheck({ kv, mailer, settings = {}, now = Date.now() }) 
     }
   }
 
+  if (newMap) await kv.put('xw-map', newMap);
+
   if (newFrame) {
     const frames = ((await kv.get('glm-frames')) || []).filter((f) => f.time !== newFrame.time);
     frames.push(newFrame);
@@ -184,6 +265,22 @@ export async function runCheck({ kv, mailer, settings = {}, now = Date.now() }) 
     dmc,
     dmcPage: DMC.pageUrl,
     glm: glm ? glmSummary(glm) : null,
+    xweather: {
+      configured: xwOn,
+      risk,
+      radiiKm: GLM.radiiKm,
+      usage: { month: state.xweather.month, used: state.xweather.used || 0, limit: (xw && xw.limit) || XWEATHER.monthlyLimit },
+      lightning: xlightning,
+      map: state.cache['xweather-mapa']
+        ? {
+            time: state.cache['xweather-mapa'].fetchedAt,
+            ...XWEATHER.map,
+            // metros por píxel en la proyección del mapa (Web Mercator)
+            mPerPx: (156543.03 * Math.cos((LOCATION.lat * Math.PI) / 180)) / 2 ** XWEATHER.map.zoom,
+          }
+        : null,
+    },
+    windyEmbed: cfg.WINDY_EMBED,
     meteoredUrl: cfg.METEORED_URL,
     sources,
     degraded,
@@ -202,6 +299,25 @@ export async function runCheck({ kv, mailer, settings = {}, now = Date.now() }) 
   await kv.put('state', state);
   await kv.put('status', status);
   return status;
+}
+
+/**
+ * ¿Hay alguna señal de tormenta? Devuelve el motivo (para mostrarlo) o null.
+ * Con señal se consultan los rayos de Xweather; sin ella, no se gastan accesos.
+ */
+export function stormRisk({ now, forecasts, glm, metars, dmcAlerts, lastStrikeAt, hours }) {
+  const until = now + hours * HOUR;
+  for (const s of forecasts) {
+    if (!s) continue;
+    for (let i = 0; i < s.times.length; i++) {
+      if (s.times[i] >= now - HOUR && s.times[i] <= until && s.thunder[i] === true) return `pronóstico de ${s.name}`;
+    }
+  }
+  if (glm && glm.clusters && glm.clusters.length) return 'rayos por satélite';
+  if (metars.some((m) => m.thunder || m.thunderNear || m.thunderRecent || m.cb)) return 'observación en aeródromos';
+  if (dmcAlerts.some((a) => a.hazard === 'tormenta' && (!a.start || a.start <= until) && (!a.end || a.end >= now))) return 'aviso de la DMC';
+  if (lastStrikeAt && now - lastStrikeAt < HOUR) return 'rayos en la última hora';
+  return null;
 }
 
 /** Lo que el panel necesita para dibujar el cerro y los anillos sobre el recorte. */

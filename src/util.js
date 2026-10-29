@@ -141,6 +141,9 @@ export function base64Encode(bytes) {
   return out;
 }
 
+/** Porcentaje entero: pct(2, 7) → 29 */
+export const pct = (k, n) => (n ? Math.round((k / n) * 100) : 0);
+
 export function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }

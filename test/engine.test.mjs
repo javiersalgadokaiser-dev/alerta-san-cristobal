@@ -220,7 +220,7 @@ test('Alerta temprana: tormenta con hora de inicio y fuentes que coinciden', () 
   assert.equal(e.hazardId, 'tormenta');
   assert.equal(e.start, Math.floor(NOW / HOUR) * HOUR + 5 * HOUR);
   assert.match(e.text, /^Podría iniciar una tormenta eléctrica en el cerro hoy a las 20:00, según ICON \(20:00\) y GFS \(21:00\)\./);
-  assert.match(e.text, /Mayor coincidencia hoy a las 21:00 \(2 de 6 fuentes\)/);
+  assert.match(e.text, /Mayor coincidencia hoy a las 21:00 \(el 33 % de las fuentes\)/);
   assert.equal(e.confidence, 'media');
 });
 
@@ -235,7 +235,7 @@ test('Alerta temprana: inicio de la lluvia y total esperado', () => {
   const f = Array.from({ length: 5 }, (_, i) => model(`r${i}`, (h) => ({ precip: h >= 10 && h < 20 ? 1.5 : 0 })));
   const [e] = upcoming({ forecasts: f });
   assert.equal(e.hazardId, 'lluvia');
-  assert.match(e.text, /^Podría empezar a llover mañana a la 01:00, según 5 de 5 fuentes/);
+  assert.match(e.text, /^Podría empezar a llover mañana a la 01:00, según el 100 % de las fuentes/);
   assert.match(e.text, /con unos 15 mm en total/);
   assert.equal(e.confidence, 'alta');
 });
@@ -270,4 +270,49 @@ test('UV: Aviso desde 8 (muy alto), Alerta desde 11 (extremo), nunca Alarma', ()
   assert.equal(level(evaluate({ now: NOW, forecasts: uv(15), cfg }), 'uv'), 2);
   const hz = evaluate({ now: NOW, forecasts: uv(12), cfg }).hazards.find((h) => h.id === 'uv');
   assert.match(hz.headline, /Índice UV de hasta 12 \(extremo\) según GFS 12/);
+});
+
+// --- Xweather ------------------------------------------------------------------------
+
+test('Xweather: rayos en tiempo real (formato de su documentación) y niveles por distancia', async () => {
+  const { parseXweatherLightning } = await import('../src/sources/xweather.js');
+  const sample = (km, bearing) => ({
+    id: 'x', loc: { long: -70.6, lat: -33.4 },
+    ob: { timestamp: (NOW - 60000) / 1000, age: 60, pulse: { type: 'cg', peakamp: -7000, numSensors: 5 } },
+    relativeTo: { lat: -33.41, long: -70.62, bearing, bearingENG: 'SSW', distanceKM: km, distanceMI: km / 1.609 },
+  });
+  const strikes = parseXweatherLightning({ success: true, error: null, response: [sample(38.2, 90), sample(9.1, 212)] });
+  assert.deepEqual(strikes.map((x) => [x.distKm, x.direction, x.type]), [[9.1, 'suroeste', 'CG'], [38.2, 'este', 'CG']]);
+  const lv = (list) => level(evaluate({ now: NOW, forecasts: calm(6), xlightning: { time: NOW - 60000, total: list.length, strikes: list }, cfg }), 'tormenta');
+  assert.equal(lv(strikes), 3);
+  assert.equal(lv([strikes[1]]), 2);
+  assert.equal(lv([]), 0);
+  assert.deepEqual(parseXweatherLightning({ success: true, error: { code: 'warn_no_data' }, response: [] }), []);
+  assert.throws(() => parseXweatherLightning({ success: false, error: { code: 'invalid_client', description: 'clave inválida' } }), /clave inválida/);
+});
+
+test('Xweather: pronóstico horario con tormenta codificada (T)', async () => {
+  const { parseXweatherForecast } = await import('../src/sources/xweather.js');
+  const p = (h, coded) => ({ timestamp: NOW / 1000 + h * 3600, tempC: 18, precipMM: 1.2, windSpeedMPS: 4, windGustMPS: 9, uvi: 7, weatherPrimaryCoded: coded, weatherCoded: [] });
+  const s = parseXweatherForecast({ success: true, response: [{ periods: [p(0, '::SC'), p(1, 'S:L:T'), p(2, 'C:L:RW')] }] });
+  assert.deepEqual(s.thunder, [false, true, false]);
+  assert.deepEqual(s.gust, [9, 9, 9]);
+  assert.equal(s.name, 'Xweather');
+});
+
+test('Xweather: los rayos se consultan solo con riesgo de tormenta y respetando el límite mensual', async () => {
+  const { stormRisk } = await import('../src/check.js');
+  const { xweatherBudget } = await import('../src/sources/xweather.js');
+  const base = { now: NOW, glm: null, metars: [], dmcAlerts: [], lastStrikeAt: null, hours: 12 };
+  assert.equal(stormRisk({ ...base, forecasts: calm(3) }), null);
+  assert.match(stormRisk({ ...base, forecasts: [model('ICON', (h) => ({ thunder: h === 5 }))] }), /pronóstico de ICON/);
+  assert.equal(stormRisk({ ...base, forecasts: [model('ICON', (h) => ({ thunder: h === 20 }))] }), null); // más allá de 12 h
+  assert.equal(stormRisk({ ...base, forecasts: [], lastStrikeAt: NOW - 30 * 60000 }), 'rayos en la última hora');
+  const st = {};
+  const b = xweatherBudget(st, NOW, 25);
+  assert.ok(b.can(10));
+  b.spend(10);
+  b.spend(10);
+  assert.equal(b.can(10), false);
+  assert.ok(xweatherBudget(st, Date.UTC(2026, 10, 2), 25).can(10)); // mes nuevo: contador en cero
 });

@@ -1,5 +1,5 @@
 import { upcomingEvents } from './upcoming.js';
-import { HOUR, LEVELS, isNum, levelAbove, levelBelow, maxOf, maxWindowSum, median, minOf, round, sumOf } from './util.js';
+import { HOUR, LEVELS, isNum, levelAbove, levelBelow, maxOf, maxWindowSum, median, minOf, pct, round, sumOf } from './util.js';
 
 // Los textos no incluyen fechas formateadas: las horas van como números (start,
 // end, peak) y se formatean en el panel (hora del navegador) o al armar el correo.
@@ -49,7 +49,7 @@ function windowOf(timeline, test, score) {
  * Combina pronósticos, observaciones y avisos oficiales en un nivel 0-3 por
  * peligro. Cada nivel viene con la lista de evidencias que lo justifican.
  */
-export function evaluate({ now, forecasts = [], metars = [], tafs = [], dmcAlerts = [], glm = null, cfg }) {
+export function evaluate({ now, forecasts = [], metars = [], tafs = [], dmcAlerts = [], glm = null, xlightning = null, cfg }) {
   const T = cfg.THRESHOLDS;
   const start = Math.floor(now / HOUR) * HOUR;
   const grid = Array.from({ length: cfg.HORIZON_HOURS }, (_, i) => start + i * HOUR);
@@ -106,7 +106,7 @@ export function evaluate({ now, forecasts = [], metars = [], tafs = [], dmcAlert
   const maxK = Math.max(0, ...timeline.map((x) => x.thunderK));
   const nThunder = Math.max(0, ...timeline.map((x) => x.thunderN));
   const alertaK = Math.max(3, Math.ceil(nThunder * T.thunderAlertaShare));
-  metric.tormenta = { value: `${maxK}/${nThunder}`, label: 'fuentes con tormenta' };
+  metric.tormenta = { value: `${pct(maxK, nThunder)} %`, label: 'de las fuentes pronostica tormenta' };
   if (maxK > 0) {
     const level = maxK >= alertaK ? 2 : maxK >= T.thunderAviso ? 1 : 0;
     const need = level === 2 ? alertaK : level === 1 ? T.thunderAviso : 1;
@@ -117,8 +117,8 @@ export function evaluate({ now, forecasts = [], metars = [], tafs = [], dmcAlert
       level,
       text:
         level > 0
-          ? `${maxK} de ${nThunder} fuentes pronostican tormenta`
-          : `Señal débil: solo 1 de ${nThunder} fuentes pronostica tormenta`,
+          ? `El ${pct(maxK, nThunder)} % de las fuentes pronostica tormenta`
+          : `Señal débil: solo el ${pct(1, nThunder)} % de las fuentes pronostica tormenta`,
       ...w,
     });
   }
@@ -232,6 +232,22 @@ export function evaluate({ now, forecasts = [], metars = [], tafs = [], dmcAlert
     if (m.gustMs) add('viento', { ...obs, level: levelAbove(m.gustMs, T.gust), text: `Ráfaga de ${m.gustMs} m/s en ${m.name}` });
   }
 
+  // --- Rayos en tiempo real (Xweather, red Vaisala: últimos 5 minutos) ---------
+  if (xlightning && now - xlightning.time <= cfg.XWEATHER.lightningMaxAgeMinutes * 60000) {
+    const R = cfg.GLM.radiiKm;
+    const base = { source: 'Xweather (red de rayos Vaisala)', kind: 'observado', start: xlightning.time };
+    const c = xlightning.strikes[0];
+    if (c) {
+      add('tormenta', {
+        ...base,
+        level: c.distKm <= R[2] ? 3 : c.distKm <= R[1] ? 2 : 1,
+        text: `${xlightning.total} rayo${xlightning.total === 1 ? '' : 's'} en los últimos 5 minutos a menos de ${cfg.XWEATHER.radiusKm} km; el más cercano a ${c.distKm} km al ${c.direction}`,
+      });
+    } else {
+      add('tormenta', { ...base, level: 0, text: `Sin rayos a menos de ${cfg.XWEATHER.radiusKm} km en los últimos 5 minutos` });
+    }
+  }
+
   // --- Rayos detectados por satélite (GOES-19 GLM, imágenes de la DMC) ---------
   if (glm && now - glm.time <= cfg.GLM.maxAgeMinutes * 60000) {
     const R = cfg.GLM.radiiKm;
@@ -244,10 +260,15 @@ export function evaluate({ now, forecasts = [], metars = [], tafs = [], dmcAlert
         level: c.distKm <= R[2] ? 3 : c.distKm <= R[1] ? 2 : 1,
         text: `Rayos a ${c.distKm} km al ${c.direction} del cerro, ocurridos entre ${GLM_AGES[c.ageClass]} min antes de la imagen${more}`,
       });
-      metric.tormenta = { value: `${c.distKm} km`, label: `rayo más cercano (al ${c.direction})` };
+      metric.tormenta = { value: `${c.distKm} km`, label: `rayo más cercano (satélite, al ${c.direction})` };
     } else {
       add('tormenta', { ...base, level: 0, text: `Sin rayos a menos de ${R[0]} km del cerro en la última imagen satelital` });
     }
+  }
+
+  if (xlightning && xlightning.strikes[0] && now - xlightning.time <= cfg.XWEATHER.lightningMaxAgeMinutes * 60000) {
+    const c = xlightning.strikes[0];
+    metric.tormenta = { value: `${c.distKm} km`, label: `rayo más cercano (hace minutos, al ${c.direction})` };
   }
 
   // --- Pronósticos aeronáuticos TAF -------------------------------------------
@@ -304,7 +325,7 @@ export function evaluate({ now, forecasts = [], metars = [], tafs = [], dmcAlert
       headline: main.level > 0 ? `${main.name}: ${main.headline}` : 'Sin alertas para las próximas 72 horas',
     },
     // Alerta temprana: cuándo podría empezar cada fenómeno y según qué fuentes
-    upcoming: upcomingEvents({ now, grid, fc, observations, tafs, dmcAlerts, glm, cfg }),
+    upcoming: upcomingEvents({ now, grid, fc, observations, tafs, dmcAlerts, glm, xlightning, cfg }),
     timeline,
     perSource,
     // Lo que pronostica cada fuente hora a hora, para comparar en el panel

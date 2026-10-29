@@ -69,6 +69,29 @@ Por defecto los correos llegan solo a tu Gmail. Para agregar a otras personas:
 Google permite enviar hasta 100 correos al día desde una cuenta Gmail. Cada alerta cuenta un
 correo por destinatario.
 
+## Xweather: rayos en tiempo real y mapa de tormentas (opcional)
+
+Xweather (Vaisala) agrega tres cosas: **rayos de los últimos 5 minutos** a menos de 100 km del
+cerro (red global de detección Vaisala, mucho más rápida que la imagen satelital de la DMC), un
+**pronóstico horario** como fuente adicional y el **mapa de tormentas** de la pestaña *Mapas*.
+
+1. Crea una cuenta en [signup.xweather.com](https://signup.xweather.com).
+2. En tu cuenta, entra a **Apps → New Application**. Nombre: *Alerta San Cristóbal*. Si pide
+   un dominio o *namespace*, escribe `script.google.com`.
+3. Copia el **Client ID** y el **Client Secret** de la aplicación.
+4. En Apps Script, en **Propiedades de la secuencia de comandos**, agrega:
+   - `XWEATHER_ID` = el Client ID
+   - `XWEATHER_SECRET` = el Client Secret
+   - `XWEATHER_LIMITE_MENSUAL` (opcional) = accesos máximos al mes. Por defecto, 14000.
+5. Ejecuta `revisar`. En el panel, *Historial y fuentes* debe mostrar las tres fuentes de
+   Xweather en verde y los accesos usados del mes.
+
+> **Costo y uso:** el plan gratuito de Xweather da 15 000 accesos al mes y es solo para **uso no
+> comercial**; para la empresa corresponde un plan pagado (fuera de EE.UU. y Canadá se contrata
+> con su área de ventas). Cada consulta de rayos usa 10 accesos, así que el sistema solo los
+> consulta cuando hay alguna señal de tormenta (pronóstico en las próximas 12 h, rayos por
+> satélite, tormenta en los aeródromos o aviso de la DMC) y se detiene al llegar al límite del mes.
+
 ## Clave de Open-Meteo (recomendada para uso en la empresa)
 
 La API gratuita de Open-Meteo es solo para **uso no comercial** y limita las consultas por

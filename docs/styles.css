@@ -558,3 +558,15 @@ td .line-key { margin-right: 8px; }
   .overall .overall-text { overflow: hidden; text-overflow: ellipsis; }
   #install { padding: 6px 8px; }
 }
+
+/* --- Mapas (Xweather, Windy, Meteored) ---------------------------------------------- */
+
+.map-sub { margin-top: 10px; }
+.map-box { display: grid; gap: 8px; }
+.map-box iframe { display: block; width: 100%; height: min(75vh, 680px); border: 1px solid var(--border); border-radius: var(--radius); background: #fff; }
+.map-layers { gap: 6px; }
+.xw-stage { position: relative; width: 100%; max-width: 960px; border-radius: var(--radius); overflow: hidden; background: #1a1a19; border: 1px solid var(--border); }
+.xw-stage img { display: block; width: 100%; height: 100%; }
+.rayos-overlay .ring-label.big { font-size: 15px; stroke-width: 3px; }
+.realtime { margin: 2px 0; padding: 6px 10px; border-radius: 8px; background: var(--surface-2); font-size: 14px; }
+.src-list li.disabled { opacity: 0.75; }

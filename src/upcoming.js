@@ -1,4 +1,4 @@
-import { HOUR, formatLocal, formatWhen, median, round } from './util.js';
+import { HOUR, formatLocal, formatWhen, median, pct, round } from './util.js';
 
 // Alerta temprana: cuándo podría empezar cada fenómeno y según qué fuentes.
 // Produce frases como "Podría iniciar una tormenta eléctrica en el cerro hoy a
@@ -42,7 +42,7 @@ export function firstEpisode(fc, grid, flag, minSources = 1, gapHours = 2) {
   return { startIdx: start, endIdx: end, start: grid[start], end: grid[end] + HOUR, peak: grid[peak], peakCount, n, supporters, confidence };
 }
 
-export function upcomingEvents({ now, grid, fc, observations = [], tafs = [], dmcAlerts = [], glm = null, cfg }) {
+export function upcomingEvents({ now, grid, fc, observations = [], tafs = [], dmcAlerts = [], glm = null, xlightning = null, cfg }) {
   const tz = cfg.LOCATION.timezone;
   const T = cfg.THRESHOLDS;
   const when = (t) => formatWhen(t, now, tz);
@@ -69,6 +69,10 @@ export function upcomingEvents({ now, grid, fc, observations = [], tafs = [], dm
       const c = glm.clusters.find((x) => x.distKm <= cfg.GLM.radiiKm[1]);
       if (c) seen.push(`rayos a ${c.distKm} km al ${c.direction} (satélite, imagen de las ${hhmm(glm.time)})`);
     }
+    if (xlightning && now - xlightning.time <= cfg.XWEATHER.lightningMaxAgeMinutes * 60000) {
+      const c = xlightning.strikes.find((x) => x.distKm <= cfg.GLM.radiiKm[1]);
+      if (c) seen.push(`rayos a ${c.distKm} km al ${c.direction} en los últimos 5 minutos (Xweather)`);
+    }
     const ev = firstEpisode(fc, grid, (s, h) => (s.thunder[h] === null ? null : s.thunder[h] === true), 1);
     const taf = tafs.flatMap((t) =>
       t.periods
@@ -91,7 +95,7 @@ export function upcomingEvents({ now, grid, fc, observations = [], tafs = [], dm
         if (who.length) text += ` Los pronósticos la mantienen según ${list(who)}.`;
       } else if (who.length) {
         text = `Podría iniciar una tormenta eléctrica en el cerro ${when(start)}, según ${list(who)}.`;
-        if (ev && ev.peakCount >= 2 && ev.peak !== ev.start) text += ` Mayor coincidencia ${when(ev.peak)} (${ev.peakCount} de ${ev.n} fuentes).`;
+        if (ev && ev.peakCount >= 2 && ev.peak !== ev.start) text += ` Mayor coincidencia ${when(ev.peak)} (el ${pct(ev.peakCount, ev.n)} % de las fuentes).`;
       } else {
         text = `La DMC advierte tormentas eléctricas probables ${start <= now ? 'desde ahora' : `desde ${when(start)}`}.`;
       }
@@ -124,7 +128,7 @@ export function upcomingEvents({ now, grid, fc, observations = [], tafs = [], dm
       let start = ev ? ev.start : null;
       if (ev) {
         const total = round(median(fc.map((s) => s.precip.slice(ev.startIdx, ev.endIdx + 1).reduce((a, v) => a + (v || 0), 0))));
-        text = `Podría empezar a llover ${when(ev.start)}, según ${ev.supporters.length} de ${N} fuentes. Seguiría hasta ${when(ev.end)}, con unos ${total} mm en total.`;
+        text = `Podría empezar a llover ${when(ev.start)}, según el ${pct(ev.supporters.length, N)} % de las fuentes. Seguiría hasta ${when(ev.end)}, con unos ${total} mm en total.`;
       }
       if (raining.length) {
         start = now;
