@@ -76,13 +76,16 @@ cerro (red global de detección Vaisala, mucho más rápida que la imagen sateli
 **pronóstico horario** como fuente adicional y el **mapa de tormentas** de la pestaña *Mapas*.
 
 1. Crea una cuenta en [signup.xweather.com](https://signup.xweather.com).
-2. En tu cuenta, entra a **Apps → New Application**. Nombre: *Alerta San Cristóbal*. Si pide
-   un dominio o *namespace*, escribe `script.google.com`.
-3. Copia el **Client ID** y el **Client Secret** de la aplicación.
+2. En el portal de Xweather, entra a **API Keys**. Usa la clave que ya aparece (*Demo App*) o
+   crea otra con **Create key**.
+3. Copia la clave **completa** (en la tabla se ve cortada con "…"): pulsa los tres puntos de la
+   columna *Actions* y elige copiarla. Tiene la forma `ID_SECRETO`.
 4. En Apps Script, en **Propiedades de la secuencia de comandos**, agrega:
-   - `XWEATHER_ID` = el Client ID
-   - `XWEATHER_SECRET` = el Client Secret
+   - `XWEATHER_APIKEY` = la clave completa
    - `XWEATHER_LIMITE_MENSUAL` (opcional) = accesos máximos al mes. Por defecto, 14000.
+
+   Con una cuenta antigua de Xweather, que entrega *Client ID* y *Client Secret* por separado,
+   usa en cambio `XWEATHER_ID` y `XWEATHER_SECRET`.
 5. Ejecuta `revisar`. En el panel, *Historial y fuentes* debe mostrar las tres fuentes de
    Xweather en verde y los accesos usados del mes.
 

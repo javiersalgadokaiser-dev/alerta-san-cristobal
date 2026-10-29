@@ -3904,7 +3904,7 @@ Panel: ${dashboardUrl}` : ""
         url: XWEATHER2.pageUrl,
         ok: false,
         disabled: true,
-        error: "Sin configurar: agrega XWEATHER_ID y XWEATHER_SECRET en las propiedades del proyecto de Apps Script"
+        error: "Sin configurar: agrega XWEATHER_APIKEY (la API key del portal de Xweather) en las propiedades del proyecto de Apps Script"
       });
     }
     const forecasts = [...models || [], ...metno ? [metno] : [], ...xwForecast ? [xwForecast] : []];
@@ -4143,6 +4143,14 @@ Panel: ${dashboardUrl}` : ""
       return { ok: true, to: to.length };
     }
   };
+  function xweatherCreds() {
+    const id = setting("XWEATHER_ID");
+    const secret = setting("XWEATHER_SECRET");
+    if (id && secret) return { id, secret };
+    const key = setting("XWEATHER_APIKEY") || id;
+    const cut = key.indexOf("_");
+    return cut > 0 ? { id: key.slice(0, cut), secret: key.slice(cut + 1) } : { id: "", secret: "" };
+  }
   function settings() {
     return {
       dashboardUrl: setting("URL_PANEL") || PANEL_URL,
@@ -4150,11 +4158,7 @@ Panel: ${dashboardUrl}` : ""
       // Clave del plan pagado de Open-Meteo (opcional; necesaria para uso comercial)
       openMeteoKey: setting("OPENMETEO_APIKEY"),
       // Xweather: https://signup.xweather.com (plan gratis solo para uso no comercial)
-      xweather: {
-        id: setting("XWEATHER_ID"),
-        secret: setting("XWEATHER_SECRET"),
-        limit: Number(setting("XWEATHER_LIMITE_MENSUAL")) || void 0
-      }
+      xweather: { ...xweatherCreds(), limit: Number(setting("XWEATHER_LIMITE_MENSUAL")) || void 0 }
     };
   }
   async function revisar() {

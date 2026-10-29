@@ -3,7 +3,7 @@ import { base64Encode, round } from '../util.js';
 
 // Xweather (Vaisala): rayos en tiempo real de su red global de detección, un
 // pronóstico horario propio y la imagen del mapa de tormentas.
-// Requiere cuenta: XWEATHER_ID y XWEATHER_SECRET en las propiedades del proyecto.
+// Requiere cuenta: XWEATHER_APIKEY (ID_SECRETO) en las propiedades del proyecto.
 // Su plan gratuito es solo para uso no comercial (15 000 accesos al mes); cada
 // consulta de rayos cuesta 10 accesos.
 

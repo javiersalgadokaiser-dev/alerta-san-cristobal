@@ -68,7 +68,7 @@ export const GLM = {
 };
 
 // Xweather (Vaisala): rayos en tiempo real, pronóstico horario y mapa de tormentas.
-// Se activa con XWEATHER_ID y XWEATHER_SECRET en las propiedades del proyecto.
+// Se activa con XWEATHER_APIKEY (o XWEATHER_ID y XWEATHER_SECRET) en las propiedades del proyecto.
 export const XWEATHER = {
   pageUrl: 'https://www.xweather.com',
   radiusKm: 100, // máximo del plan estándar

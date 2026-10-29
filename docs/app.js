@@ -768,7 +768,7 @@ function renderXweatherMap(box) {
         'div',
         { class: 'empty-state' },
         h('p', {}, 'El mapa de tormentas de Xweather necesita una cuenta de Xweather.'),
-        h('p', { class: 'meta' }, 'Crea la cuenta en xweather.com, copia el ID y el secreto de la aplicación, y agrégalos en Apps Script como propiedades XWEATHER_ID y XWEATHER_SECRET. '),
+        h('p', { class: 'meta' }, 'Crea la cuenta en xweather.com, copia la API key completa y agrégala en Apps Script como propiedad XWEATHER_APIKEY.'),
         h('a', { href: 'https://signup.xweather.com', target: '_blank', rel: 'noopener' }, 'Crear cuenta en Xweather'),
       ),
     );

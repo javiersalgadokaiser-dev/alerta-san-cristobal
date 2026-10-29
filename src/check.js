@@ -181,7 +181,7 @@ export async function runCheck({ kv, mailer, settings = {}, now = Date.now() }) 
       url: XWEATHER.pageUrl,
       ok: false,
       disabled: true,
-      error: 'Sin configurar: agrega XWEATHER_ID y XWEATHER_SECRET en las propiedades del proyecto de Apps Script',
+      error: 'Sin configurar: agrega XWEATHER_APIKEY (la API key del portal de Xweather) en las propiedades del proyecto de Apps Script',
     });
   }
 

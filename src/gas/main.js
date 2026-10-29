@@ -101,6 +101,19 @@ const mailer = {
   },
 };
 
+/**
+ * El portal de Xweather entrega una sola "API key" con la forma ID_SECRETO
+ * (XWEATHER_APIKEY). También se aceptan XWEATHER_ID y XWEATHER_SECRET por separado.
+ */
+function xweatherCreds() {
+  const id = setting('XWEATHER_ID');
+  const secret = setting('XWEATHER_SECRET');
+  if (id && secret) return { id, secret };
+  const key = setting('XWEATHER_APIKEY') || id;
+  const cut = key.indexOf('_');
+  return cut > 0 ? { id: key.slice(0, cut), secret: key.slice(cut + 1) } : { id: '', secret: '' };
+}
+
 function settings() {
   return {
     dashboardUrl: setting('URL_PANEL') || PANEL_URL,
@@ -108,11 +121,7 @@ function settings() {
     // Clave del plan pagado de Open-Meteo (opcional; necesaria para uso comercial)
     openMeteoKey: setting('OPENMETEO_APIKEY'),
     // Xweather: https://signup.xweather.com (plan gratis solo para uso no comercial)
-    xweather: {
-      id: setting('XWEATHER_ID'),
-      secret: setting('XWEATHER_SECRET'),
-      limit: Number(setting('XWEATHER_LIMITE_MENSUAL')) || undefined,
-    },
+    xweather: { ...xweatherCreds(), limit: Number(setting('XWEATHER_LIMITE_MENSUAL')) || undefined },
   };
 }
 
