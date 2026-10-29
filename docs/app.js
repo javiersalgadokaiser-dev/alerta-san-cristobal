@@ -752,7 +752,8 @@ function loadXwMap(time) {
     const promise = fetch(`${apiUrl()}?accion=mapa`, { cache: 'no-store' })
       .then((r) => r.json())
       .then((b) => {
-        if (!b.map) throw new Error('sin mapa');
+        // una versión publicada anterior no conoce ?accion=mapa y responde el estado completo
+        if (!b.map) throw new Error(b.generatedAt ? 'version antigua' : 'sin mapa');
         return b.map;
       });
     xwMapLoad = { time, promise };
@@ -779,7 +780,7 @@ function renderXweatherMap(box) {
     return;
   }
   const m = x.map;
-  const stage = h('div', { class: 'xw-stage', style: `aspect-ratio:${m.width} / ${m.height}` }, h('img', { alt: 'Mapa de tormentas de Xweather centrado en el cerro' }));
+  const stage = h('div', { class: 'xw-stage', style: `aspect-ratio:${m.width} / ${m.height}` });
   const overlay = svg('svg', { viewBox: `0 0 ${m.width} ${m.height}`, class: 'rayos-overlay', 'aria-hidden': 'true' });
   (x.radiiKm || data.glm?.radiiKm || [100, 40, 15]).forEach((km, i) => {
     const r = (km * 1000) / m.mPerPx;
@@ -793,12 +794,20 @@ function renderXweatherMap(box) {
   overlay.append(svg('circle', { cx: m.width / 2, cy: m.height / 2, r: 4, class: 'cerro-dot' }));
   stage.append(overlay);
   box.replaceChildren(stage, h('p', { class: 'meta' }, `Mapa de las ${fmtTime(m.time)} (${ago(m.time)}). © Xweather / Vaisala.`));
-  const img = stage.querySelector('img');
+  // la imagen se agrega ya cargada, para no mostrar el ícono de imagen rota mientras llega
   loadXwMap(m.time)
-    .then((map) => {
-      img.src = `data:image/jpeg;base64,${map.jpeg}`;
-    })
-    .catch(() => box.append(h('p', { class: 'meta' }, 'No se pudo cargar la imagen del mapa.')));
+    .then((map) => stage.prepend(h('img', { src: `data:image/jpeg;base64,${map.jpeg}`, alt: 'Mapa de tormentas de Xweather centrado en el cerro' })))
+    .catch((e) =>
+      box.append(
+        e.message === 'version antigua'
+          ? h(
+              'p',
+              { class: 'empty-state' },
+              'La aplicación web de Google tiene publicada una versión anterior del código, que no entrega el mapa. En Apps Script: Implementar → Gestionar implementaciones → ✏️ Editar → Versión: Nueva versión → Implementar.',
+            )
+          : h('p', { class: 'meta' }, 'No se pudo cargar la imagen del mapa.'),
+      ),
+    );
 }
 
 // --- Comparación de fuentes ---------------------------------------------------
