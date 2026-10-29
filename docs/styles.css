@@ -568,6 +568,18 @@ td .line-key { margin-right: 8px; }
 .xw-stage { position: relative; width: 100%; max-width: 960px; border-radius: var(--radius); overflow: hidden; background: #1a1a19; border: 1px solid var(--border); }
 .xw-stage img { display: block; width: 100%; height: 100%; }
 .map-box .meta { color: var(--ink-2); font-size: 13px; margin: 0; }
+/* Leyendas de los mapas: cada color va con su nombre y su significado, nunca solo */
+.map-legend { border-top: 1px solid var(--border); padding-top: 10px; font-size: 13px; line-height: 1.4; color: var(--ink-2); }
+.map-legend p { margin: 0 0 6px; }
+.map-legend .legend-title { color: var(--ink); font-weight: 600; font-size: 14px; }
+.map-legend .legend-group { color: var(--ink); font-weight: 600; margin-top: 10px; }
+.map-legend ul { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 5px 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); }
+.map-legend li { display: flex; align-items: flex-start; gap: 8px; }
+.map-legend strong { color: var(--ink); font-weight: 600; }
+.map-legend .ramp { flex: none; width: 36px; height: 12px; margin-top: 3px; border-radius: 3px; box-shadow: 0 0 0 1px var(--border); }
+.map-legend .circle-key { flex: none; width: 36px; height: 16px; margin-top: 1px; }
+.map-legend .circle-key.ring circle { fill: none; stroke: var(--lvl); stroke-width: 2; }
+.map-legend .circle-key.dot circle { fill: #fff; stroke: #000; stroke-width: 1; }
 .storm-maps { gap: 20px; }
 .storm-maps .table-title { margin-top: 0; }
 /* En el Resumen, Windy toma la misma proporción que el mapa de Xweather (4:3) */

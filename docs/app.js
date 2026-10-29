@@ -707,7 +707,7 @@ function renderSummaryMaps() {
   if (summaryShown.windy !== windyLayer) {
     summaryShown.windy = windyLayer;
     // capas debajo, como la nota bajo el mapa de Xweather: así ambos mapas quedan alineados
-    $('#sum-windy').replaceChildren(windyFrame(), windyLayerButtons(renderSummaryMaps));
+    $('#sum-windy').replaceChildren(windyFrame(), windyLayerButtons(renderSummaryMaps), windyLegend());
   }
 }
 
@@ -732,7 +732,7 @@ function renderMaps() {
   const sub = $('#map-sub');
   if (mapChoice === 'windy') {
     sub.textContent = 'Mapa interactivo de Windy centrado en el cerro. Dentro del mapa se puede cambiar el modelo (ECMWF, GFS, ICON…) y avanzar en el tiempo.';
-    box.replaceChildren(windyLayerButtons(renderMaps), windyFrame());
+    box.replaceChildren(windyLayerButtons(renderMaps), windyFrame(), windyLegend());
   } else if (mapChoice === 'meteored') {
     sub.textContent = 'Mapa interactivo de Meteored con los avisos meteorológicos de todo Chile (los publica la DMC). Incluye su publicidad.';
     const url = data.meteoredUrl || 'https://www.meteored.cl/avisos-meteorologicos/';
@@ -744,6 +744,97 @@ function renderMaps() {
     sub.textContent = 'Rayos nube-tierra de los últimos 15 minutos (red Vaisala), radar global completado con satélite y relieve. Anillos a 15, 40 y 100 km del cerro.';
     renderXweatherMap(box);
   }
+}
+
+// --- Leyendas de los mapas ------------------------------------------------------
+
+// Radar de Xweather: colores de su leyenda oficial (legends.aerisapi.com: radar-rain,
+// radar-snow y radar-ice, en dBZ). Los mm/h son aproximados (30 dBZ ≈ 3 mm/h, 45 dBZ ≈ 25 mm/h).
+const XW_RADAR = [
+  [['#9eff94', '#65ed57', '#2f8f23', '#0e3f00'], 'Verde', 'lluvia débil a moderada (hasta unos 3 mm/h)'],
+  [['#cec200', '#ffe300', '#e0a200', '#dd6100'], 'Amarillo a naranjo', 'lluvia fuerte (unos 3 a 25 mm/h)'],
+  [['#dc4000', '#da0000', '#a30005', '#7a0009'], 'Rojo', 'lluvia muy fuerte, típica de tormenta (más de 25 mm/h)'],
+  [['#a70067', '#dc22c9', '#fe82fe', '#ffebff'], 'Fucsia a blanco', 'centro de una tormenta intensa, posible granizo'],
+  [['#7cffff', '#00a4f4', '#0048db', '#5c00f5'], 'Celeste a azul', 'nieve'],
+  [['#ffa3f9', '#e756d8', '#b2119a', '#58003c'], 'Rosado a morado', 'aguanieve o hielo'],
+];
+const RING_COLORS = ['amarillo', 'naranjo', 'rojo'];
+
+// Windy: tonos tomados de la barra de colores de cada capa
+const WINDY_KEYS = {
+  thunder: {
+    intro: 'Rayos por km² que pronostica el modelo para la hora elegida.',
+    rows: [
+      [['#898989'], 'Gris, sin color', 'no se esperan rayos'],
+      [['#90bb20', '#dacd00'], 'Verde a amarillo', 'pocos rayos posibles (menos de 1 por km²)'],
+      [['#e04e07', '#ac1b1a', '#a4113a'], 'Naranjo a burdeo', 'tormenta eléctrica probable (1 a 10 rayos por km²)'],
+      [['#cc39aa', '#de65ff'], 'Fucsia a lila', 'tormenta eléctrica intensa (más de 10 rayos por km²)'],
+    ],
+  },
+  gust: {
+    intro: 'Ráfagas de viento pronosticadas, en m/s, con los niveles de este sistema.',
+    rows: [
+      [['#5970b3', '#4a93a4', '#4c9370', '#759d38'], 'Azul a verde', 'menos de 12 m/s'],
+      [['#a28641', '#9d625c'], 'Ocre', '12 a 15 m/s: Aviso'],
+      [['#9d625c', '#8d3f5e', '#895194'], 'Rosa oscuro a morado', '15 a 20 m/s: Alerta'],
+      [['#895194', '#5f64a0', '#5b88a1'], 'Morado a gris azulado', 'más de 20 m/s: Alarma'],
+    ],
+    note: 'Sobre unos 22 m/s Windy vuelve a tonos azul grisáceo: no lo confundas con viento suave.',
+  },
+  rain: {
+    intro: 'Milímetros de lluvia que pronostica el modelo para la hora elegida.',
+    rows: [
+      [['#3b7ca2', '#3a8da2'], 'Azul', 'lluvia débil (hasta unos 3 mm)'],
+      [['#38a562', '#89a23b', '#a2893b'], 'Verde a ocre', 'lluvia moderada a fuerte (unos 7 a 15 mm)'],
+      [['#a43a46', '#a93776', '#a43a9a'], 'Rojo a fucsia', 'lluvia muy fuerte (20 mm o más)'],
+    ],
+  },
+};
+
+function colorRamp(colors) {
+  return h('span', { class: 'ramp', style: `background: linear-gradient(90deg, ${colors.join(', ')})`, 'aria-hidden': 'true' });
+}
+
+function keyRow(key, name, text) {
+  return h('li', {}, key, h('span', {}, h('strong', {}, name), ` · ${text}`));
+}
+
+function circleKey(cls, r) {
+  const s = svg('svg', { viewBox: '0 0 36 16', class: `circle-key ${cls}`, 'aria-hidden': 'true' });
+  s.append(svg('circle', { cx: 18, cy: 8, r }));
+  return s;
+}
+
+function xweatherLegend(radiiKm) {
+  return h(
+    'div',
+    { class: 'map-legend' },
+    h('p', { class: 'legend-title' }, '¿Qué significan los colores?'),
+    h('p', { class: 'legend-group' }, 'Lluvia, nieve y hielo (radar)'),
+    h('ul', {}, XW_RADAR.map(([colors, name, text]) => keyRow(colorRamp(colors), name, text))),
+    h('p', {}, 'El fondo es el relieve: azul en el mar, verde apagado en los valles, café en los cerros y blanco en las cumbres. La lluvia se ve en verde brillante y la nieve, en azul intenso sobre tierra. Donde no hay radar, Xweather estima la precipitación con satélite.'),
+    h('p', { class: 'legend-group' }, 'Rayos y distancias al cerro'),
+    h(
+      'ul',
+      {},
+      radiiKm.map((km, i) => keyRow(circleKey(`ring lvl-${i + 1}`, 6), `Anillo ${RING_COLORS[i] ?? ''}`, `${km} km: un rayo dentro da ${LEVELS[i + 1] ?? LEVELS[3]}`)),
+      keyRow(circleKey('dot', 3), 'Punto blanco', 'el cerro San Cristóbal'),
+    ),
+    h('p', {}, 'Los íconos de rayo son descargas nube-tierra de los últimos 15 minutos (red Vaisala).'),
+  );
+}
+
+function windyLegend() {
+  const k = WINDY_KEYS[windyLayer];
+  return h(
+    'div',
+    { class: 'map-legend' },
+    h('p', { class: 'legend-title' }, '¿Qué significan los colores?'),
+    h('p', {}, k.intro),
+    h('ul', {}, k.rows.map(([colors, name, text]) => keyRow(colorRamp(colors), name, text))),
+    k.note ? h('p', {}, k.note) : null,
+    h('p', {}, 'La barra al pie del mapa trae la escala exacta y el recuadro sobre el cerro, el valor en ese punto. Con ▶ o la línea de tiempo se ven las horas siguientes.'),
+  );
 }
 
 /** La imagen se pide una sola vez por mapa, aunque se muestre en dos pestañas. */
@@ -782,7 +873,8 @@ function renderXweatherMap(box) {
   const m = x.map;
   const stage = h('div', { class: 'xw-stage', style: `aspect-ratio:${m.width} / ${m.height}` });
   const overlay = svg('svg', { viewBox: `0 0 ${m.width} ${m.height}`, class: 'rayos-overlay', 'aria-hidden': 'true' });
-  (x.radiiKm || data.glm?.radiiKm || [100, 40, 15]).forEach((km, i) => {
+  const radii = x.radiiKm || data.glm?.radiiKm || [100, 40, 15];
+  radii.forEach((km, i) => {
     const r = (km * 1000) / m.mPerPx;
     overlay.append(svg('circle', { cx: m.width / 2, cy: m.height / 2, r, class: `ring lvl-${i + 1}` }));
     if (r > 30) {
@@ -793,12 +885,13 @@ function renderXweatherMap(box) {
   });
   overlay.append(svg('circle', { cx: m.width / 2, cy: m.height / 2, r: 4, class: 'cerro-dot' }));
   stage.append(overlay);
-  box.replaceChildren(stage, h('p', { class: 'meta' }, `Mapa de las ${fmtTime(m.time)} (${ago(m.time)}). © Xweather / Vaisala.`));
+  const note = h('p', { class: 'meta' }, `Mapa de las ${fmtTime(m.time)} (${ago(m.time)}). © Xweather / Vaisala.`);
+  box.replaceChildren(stage, note, xweatherLegend(radii));
   // la imagen se agrega ya cargada, para no mostrar el ícono de imagen rota mientras llega
   loadXwMap(m.time)
     .then((map) => stage.prepend(h('img', { src: `data:image/jpeg;base64,${map.jpeg}`, alt: 'Mapa de tormentas de Xweather centrado en el cerro' })))
     .catch((e) =>
-      box.append(
+      note.after(
         e.message === 'version antigua'
           ? h(
               'p',
